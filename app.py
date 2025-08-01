@@ -19,7 +19,9 @@ def to_csv(df):
     return df.to_csv(index=False).encode('utf-8')
 
 def get_run_details(delivery):
-    """Safely extracts run details from a delivery object, handling both dict and int formats."""
+    """
+    Safely extracts run details from a delivery object, handling both dict and int formats for the 'runs' field.
+    """
     runs_obj = delivery.get('runs', 0)
     if isinstance(runs_obj, dict):
         return {
@@ -32,32 +34,42 @@ def get_run_details(delivery):
         return {'batter': runs_obj, 'extras': 0, 'total': runs_obj, 'wides': 0}
     return {'batter': 0, 'extras': 0, 'total': 0, 'wides': 0}
 
+
 @st.cache_data
 def get_player_summaries_single_match(data):
     """Creates DataFrames for player batting and bowling summaries for a single match."""
     info = data.get('info', {})
     player_stats = {p: {'team': t, 'runs': 0, 'balls_faced': 0, 'fours': 0, 'sixes': 0, 'runs_conceded': 0, 'balls_bowled': 0, 'wickets': 0} for t, ps in info.get('players', {}).items() for p in ps}
+
     for inning in data.get('innings', []):
         for over in inning.get('overs', []):
             for delivery in over.get('deliveries', []):
                 batter, bowler = delivery.get('batter'), delivery.get('bowler')
                 runs = get_run_details(delivery)
+                
                 if batter in player_stats:
                     player_stats[batter]['runs'] += runs['batter']
                     player_stats[batter]['balls_faced'] += 1
                     if runs['batter'] == 4: player_stats[batter]['fours'] += 1
                     if runs['batter'] == 6: player_stats[batter]['sixes'] += 1
+                
                 if bowler in player_stats:
                     player_stats[bowler]['runs_conceded'] += runs['total']
                     player_stats[bowler]['balls_bowled'] += 1
                     if 'wickets' in delivery: player_stats[bowler]['wickets'] += 1
-    batting_df = pd.DataFrame([{'player_name': p, **s} for p, s in player_stats.items() if s['balls_faced'] > 0])
-    bowling_df = pd.DataFrame([{'player_name': p, **s} for p, s in player_stats.items() if s['balls_bowled'] > 0])
+
+    batting_records = [{'player_name': p, **s} for p, s in player_stats.items() if s['balls_faced'] > 0]
+    bowling_records = [{'player_name': p, **s} for p, s in player_stats.items() if s['balls_bowled'] > 0]
+    
+    batting_df = pd.DataFrame(batting_records)
+    bowling_df = pd.DataFrame(bowling_records)
+    
     if not batting_df.empty:
         batting_df['strike_rate'] = (batting_df['runs'] / batting_df['balls_faced'].replace(0, 1) * 100).round(2)
     if not bowling_df.empty:
         bowling_df['overs'] = bowling_df['balls_bowled'].apply(lambda x: f"{int(x // 6)}.{int(x % 6)}")
         bowling_df['economy_rate'] = (bowling_df['runs_conceded'] / (bowling_df['balls_bowled'].replace(0, 1) / 6)).round(2)
+
     return batting_df, bowling_df
 
 def get_inning_stats(innings):
@@ -112,9 +124,13 @@ def get_betting_market_summary_dict(data):
         'Most Sixes (Team)': inning_stats[0]['team'] if len(inning_stats) > 0 and inning_stats[0]['sixes'] > (inning_stats[1]['sixes'] if len(inning_stats) > 1 else -1) else (inning_stats[1]['team'] if len(inning_stats) > 1 else 'N/A'),
         'Top Batsman Match': top_batsman_name,
         'Top Batsman Runs': top_batsman_runs,
+        'Batsmen to Score 50+': ", ".join(batting_df[batting_df['runs'] >= 50]['player_name'].tolist()) if not batting_df.empty and any(batting_df['runs'] >= 50) else "None",
+        'Batsmen to Score 100+': ", ".join(batting_df[batting_df['runs'] >= 100]['player_name'].tolist()) if not batting_df.empty and any(batting_df['runs'] >= 100) else "None",
+        'Man of the Match': info.get('player_of_match', ['N/A'])[0],
+        'Toss Winner': info.get('toss', {}).get('winner', 'N/A'),
         # ... other markets
     }
-
+    
 def get_binary_market_summary(data):
     """Generates a dictionary of binary-encoded market outcomes."""
     info = data.get('info', {})
@@ -144,6 +160,7 @@ def get_binary_market_summary(data):
             'Highest_Opening_Partnership': encode_winner(home_inning_stats.get('fall_of_1st_wicket', 0), away_inning_stats.get('fall_of_1st_wicket', 0)),
         })
     return binary_summary
+
 
 def get_runs_per_over_summary(data):
     """Calculates the cumulative runs at the end of each over for each inning."""
@@ -208,26 +225,30 @@ def process_all_files(uploaded_files):
         full_batting_df = pd.concat(all_batting, ignore_index=True)
         if not full_batting_df.empty:
             agg_batting = full_batting_df.groupby(['player_name', 'team'])[['runs', 'balls_faced', 'fours', 'sixes']].sum().reset_index()
-            agg_batting['strike_rate'] = (agg_batting['runs'] / agg_batting['balls_faced'].replace(0, 1) * 100).round(2)
-            agg_batting = agg_batting.sort_values('runs', ascending=False)
+            if 'runs' in agg_batting.columns:
+                agg_batting['strike_rate'] = (agg_batting['runs'] / agg_batting['balls_faced'].replace(0, 1) * 100).round(2)
+                agg_batting = agg_batting.sort_values('runs', ascending=False)
 
     if all_bowling:
         full_bowling_df = pd.concat(all_bowling, ignore_index=True)
         if not full_bowling_df.empty:
             agg_bowling = full_bowling_df.groupby(['player_name', 'team'])[['runs_conceded', 'balls_bowled', 'wickets']].sum().reset_index()
-            agg_bowling['overs'] = agg_bowling['balls_bowled'].apply(lambda x: f"{int(x // 6)}.{int(x % 6)}")
-            agg_bowling['economy_rate'] = (agg_bowling['runs_conceded'] / (agg_bowling['balls_bowled'].replace(0, 1) / 6)).round(2)
-            agg_bowling = agg_bowling.sort_values('wickets', ascending=False)
+            if 'wickets' in agg_bowling.columns:
+                agg_bowling['overs'] = agg_bowling['balls_bowled'].apply(lambda x: f"{int(x // 6)}.{int(x % 6)}")
+                agg_bowling['economy_rate'] = (agg_bowling['runs_conceded'] / (agg_bowling['balls_bowled'].replace(0, 1) / 6)).round(2)
+                agg_bowling = agg_bowling.sort_values('wickets', ascending=False)
 
     return all_match_data, match_summary_df, ball_by_ball_df, agg_batting, agg_bowling, market_summaries_df, runs_per_over_df, binary_summary_df
 
-# --- [CSV Analyzer Functions remain the same] ---
+# --- CSV Analyzer Functions ---
 def display_toss_analysis(df):
     st.subheader("Toss Analysis")
     if 'Toss Winner' in df.columns and 'Match Winner' in df.columns:
         toss_winner_match_winner = df[df['Toss Winner'] == df['Match Winner']]
         toss_win_rate = (len(toss_winner_match_winner) / len(df)) * 100 if len(df) > 0 else 0
+        
         st.metric("Toss Winner Wins Match %", f"{toss_win_rate:.2f}%")
+        
         if not toss_winner_match_winner.empty and 'toss_decision' in toss_winner_match_winner.columns:
             st.write("**Winning Toss Decision Breakdown:**")
             fig = px.pie(toss_winner_match_winner, names='toss_decision', title='Decision of Toss Winners Who Also Won the Match')
@@ -243,12 +264,12 @@ def display_frequency_analysis(df):
         if col_to_analyze:
             counts = df[col_to_analyze].value_counts().reset_index()
             counts.columns = [col_to_analyze, 'count']
+            
             fig = px.bar(counts, x=col_to_analyze, y='count', title=f"Frequency of each category in {col_to_analyze}")
             st.plotly_chart(fig, use_container_width=True)
             st.dataframe(counts)
     else:
         st.info("No categorical columns found for frequency analysis.")
-
 
 # --- Main App UI ---
 st.title("🏏 Cricket Data & Betting Market Analyzer")
