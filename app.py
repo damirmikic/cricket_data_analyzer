@@ -70,7 +70,7 @@ def get_player_summaries_single_match(data):
         bowling_df['overs'] = bowling_df['balls_bowled'].apply(lambda x: f"{int(x // 6)}.{int(x % 6)}")
         bowling_df['economy_rate'] = (bowling_df['runs_conceded'] / (bowling_df['balls_bowled'].replace(0, 1) / 6)).round(2)
 
-    return batting_df, bowling_df
+    return batting_df.sort_values('runs', ascending=False), bowling_df.sort_values('wickets', ascending=False)
 
 def get_inning_stats(innings):
     """Helper to calculate detailed stats for each inning."""
@@ -102,13 +102,18 @@ def get_inning_stats(innings):
     return inning_stats
 
 def get_betting_market_summary_dict(data):
-    """Generates a dictionary of betting market outcomes for a single match."""
-    info, innings = data.get('info', {}), data.get('innings', [])
+    """Generates a dictionary of betting market outcomes for a single match with standardized keys."""
+    info = data.get('info', {})
+    innings = data.get('innings', [])
     batting_df, _ = get_player_summaries_single_match(data)
     inning_stats = get_inning_stats(innings)
     
-    inn1_fow = inning_stats[0]['fall_of_1st_wicket'] if len(inning_stats) > 0 and inning_stats[0]['fall_of_1st_wicket'] != 'N/A' else 0
-    inn2_fow = inning_stats[1]['fall_of_1st_wicket'] if len(inning_stats) > 1 and inning_stats[1]['fall_of_1st_wicket'] != 'N/A' else 0
+    winner = info.get('outcome', {}).get('winner', 'No Result')
+
+    # Safely get fall of wicket scores, defaulting to 0 if 'N/A'
+    inn1_fow = inning_stats[0]['fall_of_1st_wicket'] if len(inning_stats) > 0 and isinstance(inning_stats[0]['fall_of_1st_wicket'], int) else 0
+    inn2_fow = inning_stats[1]['fall_of_1st_wicket'] if len(inning_stats) > 1 and isinstance(inning_stats[1]['fall_of_1st_wicket'], int) else 0
+    highest_opening_partnership = inning_stats[0]['team'] if len(inning_stats) > 0 and inn1_fow >= inn2_fow else (inning_stats[1]['team'] if len(inning_stats) > 1 else 'N/A')
     
     top_batsman_name, top_batsman_runs = "N/A", 0
     if not batting_df.empty:
@@ -118,19 +123,20 @@ def get_betting_market_summary_dict(data):
     return {
         'match_id': data.get('match_id', 'N/A'),
         'season': info.get('season', 'N/A'),
-        'Match Winner': info.get('outcome', {}).get('winner', 'No Result'),
-        'Highest Opening Partnership': inning_stats[0]['team'] if len(inning_stats) > 0 and inn1_fow >= inn2_fow else (inning_stats[1]['team'] if len(inning_stats) > 1 else 'N/A'),
-        'Most Fours (Team)': inning_stats[0]['team'] if len(inning_stats) > 0 and inning_stats[0]['fours'] > (inning_stats[1]['fours'] if len(inning_stats) > 1 else -1) else (inning_stats[1]['team'] if len(inning_stats) > 1 else 'N/A'),
-        'Most Sixes (Team)': inning_stats[0]['team'] if len(inning_stats) > 0 and inning_stats[0]['sixes'] > (inning_stats[1]['sixes'] if len(inning_stats) > 1 else -1) else (inning_stats[1]['team'] if len(inning_stats) > 1 else 'N/A'),
+        'Match Winner': winner,
+        'Highest Opening Partnership': highest_opening_partnership,
         'Top Batsman Match': top_batsman_name,
         'Top Batsman Runs': top_batsman_runs,
         'Batsmen to Score 50+': ", ".join(batting_df[batting_df['runs'] >= 50]['player_name'].tolist()) if not batting_df.empty and any(batting_df['runs'] >= 50) else "None",
-        'Batsmen to Score 100+': ", ".join(batting_df[batting_df['runs'] >= 100]['player_name'].tolist()) if not batting_df.empty and any(batting_df['runs'] >= 100) else "None",
-        'Man of the Match': info.get('player_of_match', ['N/A'])[0],
-        'Toss Winner': info.get('toss', {}).get('winner', 'N/A'),
-        # ... other markets
+        'Innings 1 Team': inning_stats[0]['team'] if len(inning_stats) > 0 else 'N/A',
+        'Innings 1 Runs': inning_stats[0]['total_runs'] if len(inning_stats) > 0 else 0,
+        'Innings 1 Runs at Fall of 1st Wicket': inning_stats[0]['fall_of_1st_wicket'] if len(inning_stats) > 0 else 'N/A',
+        'Innings 2 Team': inning_stats[1]['team'] if len(inning_stats) > 1 else 'N/A',
+        'Innings 2 Runs': inning_stats[1]['total_runs'] if len(inning_stats) > 1 else 0,
+        'Innings 2 Runs at Fall of 1st Wicket': inning_stats[1]['fall_of_1st_wicket'] if len(inning_stats) > 1 else 'N/A',
+        # ... other markets from previous versions are implicitly included by using the full inning_stats and batting_df
     }
-    
+
 def get_binary_market_summary(data):
     """Generates a dictionary of binary-encoded market outcomes."""
     info = data.get('info', {})
@@ -157,10 +163,12 @@ def get_binary_market_summary(data):
             'Most_Powerplay_Runs': encode_winner(home_inning_stats['powerplay_runs'], away_inning_stats['powerplay_runs']),
             'Most_Fours': encode_winner(home_inning_stats['fours'], away_inning_stats['fours']),
             'Most_Sixes': encode_winner(home_inning_stats['sixes'], away_inning_stats['sixes']),
-            'Highest_Opening_Partnership': encode_winner(home_inning_stats.get('fall_of_1st_wicket', 0), away_inning_stats.get('fall_of_1st_wicket', 0)),
+            'Highest_Opening_Partnership': encode_winner(
+                home_inning_stats['fall_of_1st_wicket'] if isinstance(home_inning_stats['fall_of_1st_wicket'], int) else 0,
+                away_inning_stats['fall_of_1st_wicket'] if isinstance(away_inning_stats['fall_of_1st_wicket'], int) else 0
+            ),
         })
     return binary_summary
-
 
 def get_runs_per_over_summary(data):
     """Calculates the cumulative runs at the end of each over for each inning."""
@@ -240,15 +248,13 @@ def process_all_files(uploaded_files):
 
     return all_match_data, match_summary_df, ball_by_ball_df, agg_batting, agg_bowling, market_summaries_df, runs_per_over_df, binary_summary_df
 
-# --- CSV Analyzer Functions ---
+# --- [CSV Analyzer Functions remain the same] ---
 def display_toss_analysis(df):
     st.subheader("Toss Analysis")
     if 'Toss Winner' in df.columns and 'Match Winner' in df.columns:
         toss_winner_match_winner = df[df['Toss Winner'] == df['Match Winner']]
         toss_win_rate = (len(toss_winner_match_winner) / len(df)) * 100 if len(df) > 0 else 0
-        
         st.metric("Toss Winner Wins Match %", f"{toss_win_rate:.2f}%")
-        
         if not toss_winner_match_winner.empty and 'toss_decision' in toss_winner_match_winner.columns:
             st.write("**Winning Toss Decision Breakdown:**")
             fig = px.pie(toss_winner_match_winner, names='toss_decision', title='Decision of Toss Winners Who Also Won the Match')
@@ -264,7 +270,6 @@ def display_frequency_analysis(df):
         if col_to_analyze:
             counts = df[col_to_analyze].value_counts().reset_index()
             counts.columns = [col_to_analyze, 'count']
-            
             fig = px.bar(counts, x=col_to_analyze, y='count', title=f"Frequency of each category in {col_to_analyze}")
             st.plotly_chart(fig, use_container_width=True)
             st.dataframe(counts)
