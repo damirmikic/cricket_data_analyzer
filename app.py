@@ -3,7 +3,15 @@ import pandas as pd
 import json
 import plotly.express as px
 
-st.set_page_config(layout="wide")
+# --- SEO and Page Configuration ---
+st.set_page_config(
+    page_title="Cricket Data Analyzer | Match & Betting Market Summaries",
+    page_icon="🏏",
+    layout="wide",
+    menu_items={
+        'About': "This app was created to analyze cricket match data from JSON files and provide detailed insights and betting market summaries."
+    }
+)
 
 # --- Helper Functions ---
 
@@ -65,6 +73,35 @@ def get_player_summaries_single_match(data):
 
     return batting_df, bowling_df
 
+def get_inning_stats(innings):
+    """Helper to calculate detailed stats for each inning."""
+    inning_stats = []
+    for i, inning_data in enumerate(innings):
+        stats = {'team': inning_data.get('team', f'Innings {i+1}'),'total_runs': 0,'powerplay_runs': 0,'runs_overs_7_13': 0, 'runs_overs_14_20': 0, 'highest_over': 0,'fall_of_1st_wicket': 'N/A', 'fours': 0, 'sixes': 0, 'wickets': 0}
+        running_score = 0
+        wicket_fell = False
+        for over in inning_data.get('overs', []):
+            over_num = over.get('over', -1)
+            deliveries = over.get('deliveries', [])
+            over_runs = sum(get_run_details(d)['total'] for d in deliveries)
+            if over_runs > stats['highest_over']: stats['highest_over'] = over_runs
+            if over_num < 6: stats['powerplay_runs'] += over_runs
+            if 6 <= over_num <= 12: stats['runs_overs_7_13'] += over_runs
+            if 13 <= over_num <= 19: stats['runs_overs_14_20'] += over_runs
+            for delivery in deliveries:
+                runs = get_run_details(delivery)
+                if runs['batter'] == 4: stats['fours'] += 1
+                if runs['batter'] == 6: stats['sixes'] += 1
+                if 'wickets' in delivery: stats['wickets'] += 1
+                if not wicket_fell:
+                    running_score += runs['total']
+                    if 'wickets' in delivery:
+                        stats['fall_of_1st_wicket'] = running_score
+                        wicket_fell = True
+        stats['total_runs'] = sum(get_run_details(d)['total'] for o in inning_data.get('overs', []) for d in o.get('deliveries', []))
+        inning_stats.append(stats)
+    return inning_stats
+
 def get_betting_market_summary_dict(data):
     """Generates a dictionary of betting market outcomes for a single match with standardized keys."""
     info = data.get('info', {})
@@ -73,48 +110,19 @@ def get_betting_market_summary_dict(data):
     
     winner = info.get('outcome', {}).get('winner', 'No Result')
 
-    inning_stats = []
-    four_and_six_in_over = "No"
-    overs_with_wicket = 0
-    match_wides = 0
-    for i, inning_data in enumerate(innings):
-        stats = {'team': inning_data.get('team', f'Innings {i+1}'),'total_runs': 0,'powerplay_runs': 0,'runs_overs_7_13': 0, 'runs_overs_14_20': 0, 'highest_over': 0,'fall_of_1st_wicket': 'N/A', 'runs_per_over': [], 'fours': 0, 'sixes': 0, 'wickets': 0}
-        running_score = 0
-        wicket_fell = False
-        for over in inning_data.get('overs', []):
-            over_num = over.get('over', -1)
-            deliveries = over.get('deliveries', [])
-            over_runs = sum(get_run_details(d)['total'] for d in deliveries)
-            
-            stats['runs_per_over'].append(over_runs)
-            if over_runs > stats['highest_over']: stats['highest_over'] = over_runs
-            
-            if over_num < 6: stats['powerplay_runs'] += over_runs
-            if 6 <= over_num <= 12: stats['runs_overs_7_13'] += over_runs
-            if 13 <= over_num <= 19: stats['runs_overs_14_20'] += over_runs
-
-            has_four = any(get_run_details(d)['batter'] == 4 for d in deliveries)
-            has_six = any(get_run_details(d)['batter'] == 6 for d in deliveries)
-            if has_four and has_six: four_and_six_in_over = "Yes"
-            if any('wickets' in d for d in deliveries): overs_with_wicket += 1
-                
-            for delivery in deliveries:
-                runs = get_run_details(delivery)
-                if runs['batter'] == 4: stats['fours'] += 1
-                if runs['batter'] == 6: stats['sixes'] += 1
-                if 'wickets' in delivery: stats['wickets'] += 1
-                match_wides += runs['wides']
-                if not wicket_fell:
-                    running_score += runs['total']
-                    if 'wickets' in delivery:
-                        stats['fall_of_1st_wicket'] = running_score
-                        wicket_fell = True
-        stats['total_runs'] = sum(stats['runs_per_over'])
-        inning_stats.append(stats)
+    inning_stats = get_inning_stats(innings)
     
     inn1_fow = inning_stats[0]['fall_of_1st_wicket'] if len(inning_stats) > 0 and inning_stats[0]['fall_of_1st_wicket'] != 'N/A' else 0
     inn2_fow = inning_stats[1]['fall_of_1st_wicket'] if len(inning_stats) > 1 and inning_stats[1]['fall_of_1st_wicket'] != 'N/A' else 0
     highest_opening_partnership = inning_stats[0]['team'] if len(inning_stats) > 0 and inn1_fow >= inn2_fow else (inning_stats[1]['team'] if len(inning_stats) > 1 else 'N/A')
+    
+    inn1_fours = inning_stats[0]['fours'] if len(inning_stats) > 0 else 0
+    inn2_fours = inning_stats[1]['fours'] if len(inning_stats) > 1 else 0
+    most_fours_team = inning_stats[0]['team'] if inn1_fours > inn2_fours else (inning_stats[1]['team'] if inn2_fours > inn1_fours else 'Draw')
+
+    inn1_sixes = inning_stats[0]['sixes'] if len(inning_stats) > 0 else 0
+    inn2_sixes = inning_stats[1]['sixes'] if len(inning_stats) > 1 else 0
+    most_sixes_team = inning_stats[0]['team'] if inn1_sixes > inn2_sixes else (inning_stats[1]['team'] if inn2_sixes > inn1_sixes else 'Draw')
     
     top_batsman_name, top_batsman_runs = "N/A", "N/A"
     if not batting_df.empty:
@@ -124,19 +132,13 @@ def get_betting_market_summary_dict(data):
     players_50 = ", ".join(batting_df[batting_df['runs'] >= 50]['player_name'].tolist()) if not batting_df.empty else "None"
     players_100 = ", ".join(batting_df[batting_df['runs'] >= 100]['player_name'].tolist()) if not batting_df.empty else "None"
 
-    summary_dict = {
+    return {
         'match_id': data.get('match_id', 'N/A'),
         'season': info.get('season', 'N/A'),
-        'Innings 1 Team': inning_stats[0]['team'] if len(inning_stats) > 0 else 'N/A',
-        'Innings 2 Team': inning_stats[1]['team'] if len(inning_stats) > 1 else 'N/A',
-        'Innings 1 Runs': inning_stats[0]['total_runs'] if len(inning_stats) > 0 else 0,
-        'Innings 1 Wickets': inning_stats[0]['wickets'] if len(inning_stats) > 0 else 0,
-        'Innings 2 Runs': inning_stats[1]['total_runs'] if len(inning_stats) > 1 else 0,
-        'Innings 2 Wickets': inning_stats[1]['wickets'] if len(inning_stats) > 1 else 0,
         'Match Winner': winner,
-        'Tied Match': 'Yes' if info.get('outcome', {}).get('result') == 'tie' else 'No',
         'Highest Opening Partnership': highest_opening_partnership,
-        'Highest Score at 1st Dismissal': highest_opening_partnership,
+        'Most Fours (Team)': most_fours_team,
+        'Most Sixes (Team)': most_sixes_team,
         'Top Batsman Match': top_batsman_name,
         'Top Batsman Runs': top_batsman_runs,
         'Batsmen to Score 50+': players_50 if players_50 else "None",
@@ -144,31 +146,32 @@ def get_betting_market_summary_dict(data):
         'Man of the Match': info.get('player_of_match', ['N/A'])[0],
         'Toss Winner': info.get('toss', {}).get('winner', 'N/A'),
         'Max Over in Match': max(inning_stats[0]['highest_over'] if len(inning_stats) > 0 else 0, inning_stats[1]['highest_over'] if len(inning_stats) > 1 else 0),
-        'Match Fours': batting_df['fours'].sum() if not batting_df.empty else 0,
-        'Match Sixes': batting_df['sixes'].sum() if not batting_df.empty else 0,
+        'Match Fours': inn1_fours + inn2_fours,
+        'Match Sixes': inn1_sixes + inn2_sixes,
         'Match Wickets': (inning_stats[0]['wickets'] if len(inning_stats) > 0 else 0) + (inning_stats[1]['wickets'] if len(inning_stats) > 1 else 0),
-        'Match Wides': match_wides,
-        
-        
-        'Innings 1 Fours': inning_stats[0]['fours'] if len(inning_stats) > 0 else 0,
-        'Innings 1 Sixes': inning_stats[0]['sixes'] if len(inning_stats) > 0 else 0,
+        'Innings 1 Team': inning_stats[0]['team'] if len(inning_stats) > 0 else 'N/A',
+        'Innings 1 Runs': inning_stats[0]['total_runs'] if len(inning_stats) > 0 else 0,
+        'Innings 1 Wickets': inning_stats[0]['wickets'] if len(inning_stats) > 0 else 0,
+        'Innings 1 Fours': inn1_fours,
+        'Innings 1 Sixes': inn1_sixes,
         'Innings 1 Runs (Overs 1-6)': inning_stats[0]['powerplay_runs'] if len(inning_stats) > 0 else 0,
         'Innings 1 Runs (Overs 7-13)': inning_stats[0]['runs_overs_7_13'] if len(inning_stats) > 0 else 0,
         'Innings 1 Runs (Overs 14-20)': inning_stats[0]['runs_overs_14_20'] if len(inning_stats) > 0 else 0,
         'Innings 1 Runs at Fall of 1st Wicket': inn1_fow,
         'Innings 1 Highest Over': inning_stats[0]['highest_over'] if len(inning_stats) > 0 else 0,
-        
-        
-        'Innings 2 Fours': inning_stats[1]['fours'] if len(inning_stats) > 1 else 0,
-        'Innings 2 Sixes': inning_stats[1]['sixes'] if len(inning_stats) > 1 else 0,
+        'Innings 2 Team': inning_stats[1]['team'] if len(inning_stats) > 1 else 'N/A',
+        'Innings 2 Runs': inning_stats[1]['total_runs'] if len(inning_stats) > 1 else 0,
+        'Innings 2 Wickets': inning_stats[1]['wickets'] if len(inning_stats) > 1 else 0,
+        'Innings 2 Fours': inn2_fours,
+        'Innings 2 Sixes': inn2_sixes,
         'Innings 2 Runs (Overs 1-6)': inning_stats[1]['powerplay_runs'] if len(inning_stats) > 1 else 0,
         'Innings 2 Runs (Overs 7-13)': inning_stats[1]['runs_overs_7_13'] if len(inning_stats) > 1 else 0,
         'Innings 2 Runs (Overs 14-20)': inning_stats[1]['runs_overs_14_20'] if len(inning_stats) > 1 else 0,
         'Innings 2 Runs at Fall of 1st Wicket': inn2_fow,
         'Innings 2 Highest Over': inning_stats[1]['highest_over'] if len(inning_stats) > 1 else 0,
     }
-    return summary_dict
 
+# --- [Other helper functions like get_runs_per_over_summary remain the same] ---
 def get_runs_per_over_summary(data):
     """Calculates the cumulative runs at the end of each over for each inning."""
     all_over_summaries = []
@@ -243,15 +246,13 @@ def process_all_files(uploaded_files):
 
     return all_match_data, match_summary_df, ball_by_ball_df, agg_batting, agg_bowling, market_summaries_df, runs_per_over_df
 
-# --- CSV Analyzer Functions ---
+# --- [CSV Analyzer Functions remain the same] ---
 def display_toss_analysis(df):
     st.subheader("Toss Analysis")
     if 'Toss Winner' in df.columns and 'Match Winner' in df.columns:
         toss_winner_match_winner = df[df['Toss Winner'] == df['Match Winner']]
         toss_win_rate = (len(toss_winner_match_winner) / len(df)) * 100 if len(df) > 0 else 0
-        
         st.metric("Toss Winner Wins Match %", f"{toss_win_rate:.2f}%")
-        
         if not toss_winner_match_winner.empty and 'toss_decision' in toss_winner_match_winner.columns:
             st.write("**Winning Toss Decision Breakdown:**")
             fig = px.pie(toss_winner_match_winner, names='toss_decision', title='Decision of Toss Winners Who Also Won the Match')
@@ -267,25 +268,20 @@ def display_frequency_analysis(df):
         if col_to_analyze:
             counts = df[col_to_analyze].value_counts().reset_index()
             counts.columns = [col_to_analyze, 'count']
-            
             fig = px.bar(counts, x=col_to_analyze, y='count', title=f"Frequency of each category in {col_to_analyze}")
             st.plotly_chart(fig, use_container_width=True)
             st.dataframe(counts)
     else:
         st.info("No categorical columns found for frequency analysis.")
 
+
 # --- Main App UI ---
-st.title("🏏 Multi-Match Cricket Data Analyzer")
+st.title("🏏 Cricket Data & Betting Market Analyzer")
 
 st.sidebar.header("Upload Data")
-
-if 'json_uploader_key' not in st.session_state:
-    st.session_state.json_uploader_key = 0
-if 'csv_uploader_key' not in st.session_state:
-    st.session_state.csv_uploader_key = 1000 # Use a different starting number to ensure uniqueness
-
-json_files = st.sidebar.file_uploader("Upload JSON match files", type=["json"], accept_multiple_files=True, key=st.session_state.json_uploader_key)
-
+if 'json_uploader_key' not in st.session_state: st.session_state.json_uploader_key = 0
+if 'csv_uploader_key' not in st.session_state: st.session_state.csv_uploader_key = 1000
+json_files = st.sidebar.file_uploader("Upload Cricsheet JSON match files", type=["json"], accept_multiple_files=True, key=st.session_state.json_uploader_key)
 if st.sidebar.button("Clear Uploaded Files"):
     st.session_state.json_uploader_key += 1
     st.session_state.csv_uploader_key += 1
@@ -305,22 +301,22 @@ if main_page == "JSON Data Analyzer":
         st.markdown("---")
 
         if json_page == "Match Summaries":
-            st.subheader("Match Summaries (Standardized)")
+            st.subheader("Detailed Cricket Match Summaries")
             st.dataframe(match_summary)
             st.download_button("Download Summaries CSV", to_csv(match_summary), "match_summaries.csv", "text/csv")
         
         elif json_page == "Aggregated Batting Stats":
-            st.subheader("Aggregated Player Batting Stats")
+            st.subheader("Aggregated Player Batting Stats Across All Matches")
             st.dataframe(batting_summary)
             st.download_button("Download Batting CSV", to_csv(batting_summary), "aggregated_batting_summary.csv", "text/csv")
         
         elif json_page == "Aggregated Bowling Stats":
-            st.subheader("Aggregated Player Bowling Stats")
+            st.subheader("Aggregated Player Bowling Stats Across All Matches")
             st.dataframe(bowling_summary)
             st.download_button("Download Bowling CSV", to_csv(bowling_summary), "aggregated_bowling_summary.csv", "text/csv")
         
         elif json_page == "Combined Ball-by-Ball":
-            st.subheader("Combined Ball-by-Ball Data")
+            st.subheader("Combined Ball-by-Ball Data Log")
             st.dataframe(bbb)
             st.download_button("Download Ball-by-Ball CSV", to_csv(bbb), "combined_ball_by_ball.csv", "text/csv")
         
@@ -371,11 +367,11 @@ if main_page == "JSON Data Analyzer":
                 st.warning("Could not generate runs per over summaries.")
 
     else:
-        st.info("Please upload one or more JSON files to begin analysis.")
+        st.info("Upload your Cricsheet JSON files to generate detailed match summaries, player statistics, and betting market outcomes.")
 
 elif main_page == "CSV Market Analyzer":
-    st.header("CSV Betting Market Analyzer")
-    st.info("Upload a CSV file (like the 'all_market_summaries.csv' generated by this app) to analyze trends.")
+    st.header("Analyze Cricket Betting Market Trends from CSV")
+    st.info("Upload a CSV file (like the 'all_market_summaries.csv' generated by this app) to analyze trends across multiple matches.")
     
     csv_file = st.file_uploader("Upload Market Summary CSV", type=["csv"], key=st.session_state.csv_uploader_key)
     
