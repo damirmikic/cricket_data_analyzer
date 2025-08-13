@@ -230,6 +230,209 @@ def calculate_venue_wise_stats(data_list):
     
     return venue_summary
 
+def calculate_team_wise_stats(data_list):
+    """
+    Calculate comprehensive team-wise statistics for cricket matches.
+    
+    Args:
+        data_list: List of cricket match data (JSON format)
+    
+    Returns:
+        dict: Team-wise statistics including batting, bowling, and match outcomes
+    """
+    team_stats = {}
+    
+    for data in data_list:
+        info = data.get('info', {})
+        teams = info.get('teams', [])
+        winner = info.get('outcome', {}).get('winner', 'No Result')
+        toss_winner = info.get('toss', {}).get('winner', 'Unknown')
+        toss_decision = info.get('toss', {}).get('decision', 'Unknown')
+        
+        # Initialize team stats if not exists
+        for team in teams:
+            if team not in team_stats:
+                team_stats[team] = {
+                    'matches_played': 0,
+                    'matches_won': 0,
+                    'matches_lost': 0,
+                    'no_results': 0,
+                    'toss_won': 0,
+                    'toss_won_match_won': 0,
+                    'bat_first_matches': 0,
+                    'bat_first_wins': 0,
+                    'bowl_first_matches': 0,
+                    'bowl_first_wins': 0,
+                    'total_runs_scored': 0,
+                    'total_runs_conceded': 0,
+                    'total_balls_faced': 0,
+                    'total_balls_bowled': 0,
+                    'total_wickets_lost': 0,
+                    'total_wickets_taken': 0,
+                    'total_fours_hit': 0,
+                    'total_sixes_hit': 0,
+                    'total_dots_faced': 0,
+                    'total_dots_bowled': 0,
+                    'innings_scores': [],
+                    'powerplay_runs_scored': [],
+                    'powerplay_runs_conceded': [],
+                    'death_over_runs_scored': [],
+                    'death_over_runs_conceded': [],
+                    'highest_score': 0,
+                    'lowest_score': float('inf'),
+                    'venues_played': set(),
+                    'opponents_faced': set()
+                }
+        
+        # Update match results
+        for team in teams:
+            team_stats[team]['matches_played'] += 1
+            team_stats[team]['venues_played'].add(info.get('venue', 'Unknown'))
+            
+            # Add opponents
+            opponents = [t for t in teams if t != team]
+            for opponent in opponents:
+                team_stats[team]['opponents_faced'].add(opponent)
+            
+            if winner == team:
+                team_stats[team]['matches_won'] += 1
+            elif winner != 'No Result' and winner in teams:
+                team_stats[team]['matches_lost'] += 1
+            else:
+                team_stats[team]['no_results'] += 1
+            
+            # Toss statistics
+            if toss_winner == team:
+                team_stats[team]['toss_won'] += 1
+                if winner == team:
+                    team_stats[team]['toss_won_match_won'] += 1
+                
+                # Toss decision impact
+                if toss_decision == 'bat':
+                    team_stats[team]['bat_first_matches'] += 1
+                    if winner == team:
+                        team_stats[team]['bat_first_wins'] += 1
+                elif toss_decision == 'field':
+                    team_stats[team]['bowl_first_matches'] += 1
+                    if winner == team:
+                        team_stats[team]['bowl_first_wins'] += 1
+        
+        # Process innings data
+        for inning_idx, inning in enumerate(data.get('innings', [])):
+            batting_team = inning.get('team', 'Unknown')
+            bowling_team = None
+            
+            # Find bowling team
+            for team in teams:
+                if team != batting_team:
+                    bowling_team = team
+                    break
+            
+            if batting_team in team_stats:
+                inning_runs = 0
+                inning_balls = 0
+                inning_wickets = 0
+                inning_fours = 0
+                inning_sixes = 0
+                inning_dots = 0
+                powerplay_runs = 0
+                death_over_runs = 0
+                
+                for over in inning.get('overs', []):
+                    over_num = over.get('over', 0)
+                    
+                    for delivery in over.get('deliveries', []):
+                        # Skip extras for ball count
+                        if 'extras' not in delivery or not any(k in delivery['extras'] for k in ['wides', 'noballs']):
+                            inning_balls += 1
+                            team_stats[batting_team]['total_balls_faced'] += 1
+                            if bowling_team and bowling_team in team_stats:
+                                team_stats[bowling_team]['total_balls_bowled'] += 1
+                        
+                        runs = delivery['runs']['batter']
+                        total_runs = delivery['runs']['total']
+                        
+                        inning_runs += total_runs
+                        team_stats[batting_team]['total_runs_scored'] += total_runs
+                        if bowling_team and bowling_team in team_stats:
+                            team_stats[bowling_team]['total_runs_conceded'] += total_runs
+                        
+                        if runs == 0:
+                            inning_dots += 1
+                            team_stats[batting_team]['total_dots_faced'] += 1
+                            if bowling_team and bowling_team in team_stats:
+                                team_stats[bowling_team]['total_dots_bowled'] += 1
+                        elif runs == 4:
+                            inning_fours += 1
+                            team_stats[batting_team]['total_fours_hit'] += 1
+                        elif runs == 6:
+                            inning_sixes += 1
+                            team_stats[batting_team]['total_sixes_hit'] += 1
+                        
+                        if 'wickets' in delivery:
+                            inning_wickets += 1
+                            team_stats[batting_team]['total_wickets_lost'] += 1
+                            if bowling_team and bowling_team in team_stats:
+                                team_stats[bowling_team]['total_wickets_taken'] += 1
+                        
+                        # Phase-wise runs
+                        if over_num < 6:  # Powerplay
+                            powerplay_runs += total_runs
+                        elif over_num >= 15:  # Death overs
+                            death_over_runs += total_runs
+                
+                # Store innings data
+                team_stats[batting_team]['innings_scores'].append(inning_runs)
+                team_stats[batting_team]['powerplay_runs_scored'].append(powerplay_runs)
+                team_stats[batting_team]['death_over_runs_scored'].append(death_over_runs)
+                
+                if bowling_team and bowling_team in team_stats:
+                    team_stats[bowling_team]['powerplay_runs_conceded'].append(powerplay_runs)
+                    team_stats[bowling_team]['death_over_runs_conceded'].append(death_over_runs)
+                
+                # Update highest/lowest scores
+                if inning_runs > team_stats[batting_team]['highest_score']:
+                    team_stats[batting_team]['highest_score'] = inning_runs
+                if inning_runs < team_stats[batting_team]['lowest_score']:
+                    team_stats[batting_team]['lowest_score'] = inning_runs
+    
+    # Calculate derived statistics
+    team_summary = {}
+    for team, stats in team_stats.items():
+        if stats['matches_played'] > 0:
+            # Convert sets to counts
+            stats['venues_played'] = len(stats['venues_played'])
+            stats['opponents_faced'] = len(stats['opponents_faced'])
+            
+            # Fix lowest score if no valid scores
+            if stats['lowest_score'] == float('inf'):
+                stats['lowest_score'] = 0
+            
+            team_summary[team] = {
+                **stats,
+                'win_percentage': (stats['matches_won'] / stats['matches_played']) * 100,
+                'loss_percentage': (stats['matches_lost'] / stats['matches_played']) * 100,
+                'toss_win_percentage': (stats['toss_won'] / stats['matches_played']) * 100,
+                'toss_win_match_win_rate': (stats['toss_won_match_won'] / stats['toss_won']) * 100 if stats['toss_won'] > 0 else 0,
+                'bat_first_win_rate': (stats['bat_first_wins'] / stats['bat_first_matches']) * 100 if stats['bat_first_matches'] > 0 else 0,
+                'bowl_first_win_rate': (stats['bowl_first_wins'] / stats['bowl_first_matches']) * 100 if stats['bowl_first_matches'] > 0 else 0,
+                'avg_score': sum(stats['innings_scores']) / len(stats['innings_scores']) if stats['innings_scores'] else 0,
+                'avg_runs_per_ball': stats['total_runs_scored'] / stats['total_balls_faced'] if stats['total_balls_faced'] > 0 else 0,
+                'avg_run_rate': (stats['total_runs_scored'] / stats['total_balls_faced'] * 6) if stats['total_balls_faced'] > 0 else 0,
+                'strike_rate': (stats['total_runs_scored'] / stats['total_balls_faced'] * 100) if stats['total_balls_faced'] > 0 else 0,
+                'dot_ball_percentage': (stats['total_dots_faced'] / stats['total_balls_faced'] * 100) if stats['total_balls_faced'] > 0 else 0,
+                'boundary_percentage': ((stats['total_fours_hit'] + stats['total_sixes_hit']) / stats['total_balls_faced'] * 100) if stats['total_balls_faced'] > 0 else 0,
+                'avg_powerplay_runs': sum(stats['powerplay_runs_scored']) / len(stats['powerplay_runs_scored']) if stats['powerplay_runs_scored'] else 0,
+                'avg_death_over_runs': sum(stats['death_over_runs_scored']) / len(stats['death_over_runs_scored']) if stats['death_over_runs_scored'] else 0,
+                'bowling_avg_runs_conceded': stats['total_runs_conceded'] / stats['total_balls_bowled'] * 6 if stats['total_balls_bowled'] > 0 else 0,
+                'bowling_strike_rate': stats['total_balls_bowled'] / stats['total_wickets_taken'] if stats['total_wickets_taken'] > 0 else 0,
+                'bowling_economy': stats['total_runs_conceded'] / (stats['total_balls_bowled'] / 6) if stats['total_balls_bowled'] > 0 else 0,
+                'avg_powerplay_runs_conceded': sum(stats['powerplay_runs_conceded']) / len(stats['powerplay_runs_conceded']) if stats['powerplay_runs_conceded'] else 0,
+                'avg_death_over_runs_conceded': sum(stats['death_over_runs_conceded']) / len(stats['death_over_runs_conceded']) if stats['death_over_runs_conceded'] else 0
+            }
+    
+    return team_summary
+
 def calculate_markov_chain_stats(data_list, team_wise=False):
     """
     Calculate statistical summaries useful for Markov chain cricket simulation.
@@ -558,7 +761,7 @@ if page == "JSON Data Analyzer":
         raw_data, match_summary, bbb, batting_summary, bowling_summary, market_summaries_df = process_all_files(json_files)
 
         st.sidebar.subheader("JSON Analyzer Views")
-        json_page = st.sidebar.radio("Choose a data view", ["Match Summaries", "Aggregated Batting Stats", "Aggregated Bowling Stats", "Combined Ball-by-Ball", "Betting Market Summaries", "Markov Chain Statistics", "Venue-wise Statistics"])
+        json_page = st.sidebar.radio("Choose a data view", ["Match Summaries", "Aggregated Batting Stats", "Aggregated Bowling Stats", "Combined Ball-by-Ball", "Betting Market Summaries", "Markov Chain Statistics", "Venue-wise Statistics", "Team-wise Statistics"])
         
         st.header(f"Analysis of {len(json_files)} Match(es)")
         st.markdown("---")
@@ -960,6 +1163,284 @@ if page == "JSON Data Analyzer":
                 3. **Toss Impact**: Analyze whether to bat or bowl first at specific venues
                 4. **Match Simulation**: Use venue-specific statistics for more accurate predictions
                 5. **Team Strategy**: Adapt game plans based on venue characteristics
+                """)
+        
+        elif json_page == "Team-wise Statistics":
+            st.subheader("Team-wise Cricket Statistics")
+            st.info("Comprehensive analysis of team performance, batting/bowling patterns, and head-to-head comparisons.")
+            
+            # Calculate team-wise statistics
+            team_stats = calculate_team_wise_stats(raw_data)
+            
+            if not team_stats:
+                st.warning("No team data found in the uploaded files.")
+            else:
+                # Overview metrics
+                total_teams = len(team_stats)
+                total_matches_analyzed = sum(stats['matches_played'] for stats in team_stats.values()) // 2  # Divide by 2 since each match involves 2 teams
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Total Teams", total_teams)
+                with col2:
+                    st.metric("Total Matches", total_matches_analyzed)
+                with col3:
+                    avg_matches_per_team = sum(stats['matches_played'] for stats in team_stats.values()) / total_teams if total_teams > 0 else 0
+                    st.metric("Avg Matches per Team", f"{avg_matches_per_team:.1f}")
+                
+                st.markdown("---")
+                
+                # Team comparison table
+                st.subheader("Team Performance Overview")
+                
+                # Create DataFrame for team comparison
+                team_comparison_data = []
+                for team, stats in team_stats.items():
+                    team_comparison_data.append({
+                        'Team': team,
+                        'Matches': stats['matches_played'],
+                        'Win %': f"{stats['win_percentage']:.1f}%",
+                        'Avg Score': f"{stats['avg_score']:.0f}",
+                        'Strike Rate': f"{stats['strike_rate']:.1f}",
+                        'Boundary %': f"{stats['boundary_percentage']:.1f}%",
+                        'Bowling Economy': f"{stats['bowling_economy']:.2f}",
+                        'Toss Win %': f"{stats['toss_win_percentage']:.1f}%",
+                        'Venues': stats['venues_played']
+                    })
+                
+                team_df = pd.DataFrame(team_comparison_data)
+                # Sort by win percentage
+                team_df = team_df.sort_values('Win %', ascending=False, key=lambda x: x.str.rstrip('%').astype(float))
+                st.dataframe(team_df, use_container_width=True)
+                
+                # Download team comparison
+                st.download_button(
+                    "Download Team Comparison CSV",
+                    to_csv(team_df),
+                    "team_comparison.csv",
+                    "text/csv"
+                )
+                
+                st.markdown("---")
+                
+                # Detailed team analysis
+                st.subheader("Detailed Team Analysis")
+                
+                # Team selector
+                selected_team = st.selectbox(
+                    "Select a team for detailed analysis:",
+                    options=list(team_stats.keys()),
+                    index=0
+                )
+                
+                if selected_team and selected_team in team_stats:
+                    team_data = team_stats[selected_team]
+                    
+                    st.write(f"### 🏏 {selected_team}")
+                    
+                    # Match record
+                    st.write("**Match Record:**")
+                    record_col1, record_col2, record_col3, record_col4 = st.columns(4)
+                    with record_col1:
+                        st.metric("Matches Played", team_data['matches_played'])
+                    with record_col2:
+                        st.metric("Wins", team_data['matches_won'])
+                        st.metric("Win %", f"{team_data['win_percentage']:.1f}%")
+                    with record_col3:
+                        st.metric("Losses", team_data['matches_lost'])
+                        st.metric("Loss %", f"{team_data['loss_percentage']:.1f}%")
+                    with record_col4:
+                        st.metric("No Results", team_data['no_results'])
+                        st.metric("Venues Played", team_data['venues_played'])
+                    
+                    st.markdown("---")
+                    
+                    # Batting statistics
+                    st.write("**Batting Performance:**")
+                    bat_col1, bat_col2, bat_col3, bat_col4 = st.columns(4)
+                    with bat_col1:
+                        st.metric("Avg Score", f"{team_data['avg_score']:.0f}")
+                        st.metric("Highest Score", team_data['highest_score'])
+                    with bat_col2:
+                        st.metric("Strike Rate", f"{team_data['strike_rate']:.1f}")
+                        st.metric("Run Rate", f"{team_data['avg_run_rate']:.2f}")
+                    with bat_col3:
+                        st.metric("Boundary %", f"{team_data['boundary_percentage']:.1f}%")
+                        st.metric("Dot Ball %", f"{team_data['dot_ball_percentage']:.1f}%")
+                    with bat_col4:
+                        st.metric("Fours Hit", team_data['total_fours_hit'])
+                        st.metric("Sixes Hit", team_data['total_sixes_hit'])
+                    
+                    # Phase-wise batting
+                    st.write("**Phase-wise Batting:**")
+                    phase_bat_col1, phase_bat_col2 = st.columns(2)
+                    with phase_bat_col1:
+                        st.metric("Avg Powerplay Runs", f"{team_data['avg_powerplay_runs']:.1f}")
+                    with phase_bat_col2:
+                        st.metric("Avg Death Over Runs", f"{team_data['avg_death_over_runs']:.1f}")
+                    
+                    st.markdown("---")
+                    
+                    # Bowling statistics
+                    st.write("**Bowling Performance:**")
+                    bowl_col1, bowl_col2, bowl_col3, bowl_col4 = st.columns(4)
+                    with bowl_col1:
+                        st.metric("Economy Rate", f"{team_data['bowling_economy']:.2f}")
+                        st.metric("Strike Rate", f"{team_data['bowling_strike_rate']:.1f}")
+                    with bowl_col2:
+                        st.metric("Wickets Taken", team_data['total_wickets_taken'])
+                        st.metric("Dots Bowled", team_data['total_dots_bowled'])
+                    with bowl_col3:
+                        st.metric("Avg PP Runs Conceded", f"{team_data['avg_powerplay_runs_conceded']:.1f}")
+                    with bowl_col4:
+                        st.metric("Avg Death Runs Conceded", f"{team_data['avg_death_over_runs_conceded']:.1f}")
+                    
+                    st.markdown("---")
+                    
+                    # Toss and decision impact
+                    st.write("**Toss & Decision Analysis:**")
+                    toss_col1, toss_col2, toss_col3, toss_col4 = st.columns(4)
+                    with toss_col1:
+                        st.metric("Toss Win %", f"{team_data['toss_win_percentage']:.1f}%")
+                    with toss_col2:
+                        st.metric("Toss Win → Match Win", f"{team_data['toss_win_match_win_rate']:.1f}%")
+                    with toss_col3:
+                        st.metric("Bat First Win Rate", f"{team_data['bat_first_win_rate']:.1f}%")
+                    with toss_col4:
+                        st.metric("Bowl First Win Rate", f"{team_data['bowl_first_win_rate']:.1f}%")
+                
+                st.markdown("---")
+                
+                # Team comparisons with visualizations
+                st.subheader("Team Performance Comparisons")
+                
+                if len(team_stats) > 1:
+                    # Win percentage comparison
+                    win_data = []
+                    for team, stats in team_stats.items():
+                        win_data.append({
+                            'Team': team,
+                            'Win %': stats['win_percentage'],
+                            'Matches': stats['matches_played']
+                        })
+                    
+                    win_df = pd.DataFrame(win_data)
+                    win_df = win_df.sort_values('Win %', ascending=True)  # Sort for better visualization
+                    fig_win = px.bar(
+                        win_df, 
+                        x='Win %', 
+                        y='Team',
+                        orientation='h',
+                        title='Win Percentage by Team',
+                        hover_data=['Matches']
+                    )
+                    st.plotly_chart(fig_win, use_container_width=True)
+                    
+                    # Batting vs Bowling performance
+                    performance_data = []
+                    for team, stats in team_stats.items():
+                        performance_data.append({
+                            'Team': team,
+                            'Strike Rate': stats['strike_rate'],
+                            'Economy Rate': stats['bowling_economy'],
+                            'Avg Score': stats['avg_score']
+                        })
+                    
+                    perf_df = pd.DataFrame(performance_data)
+                    fig_perf = px.scatter(
+                        perf_df, 
+                        x='Strike Rate', 
+                        y='Economy Rate',
+                        size='Avg Score',
+                        hover_name='Team',
+                        title='Batting Strike Rate vs Bowling Economy Rate',
+                        labels={'Strike Rate': 'Batting Strike Rate', 'Economy Rate': 'Bowling Economy Rate'}
+                    )
+                    st.plotly_chart(fig_perf, use_container_width=True)
+                    
+                    # Phase-wise performance comparison
+                    phase_data = []
+                    for team, stats in team_stats.items():
+                        phase_data.extend([
+                            {'Team': team, 'Phase': 'Powerplay', 'Runs Scored': stats['avg_powerplay_runs'], 'Runs Conceded': stats['avg_powerplay_runs_conceded']},
+                            {'Team': team, 'Phase': 'Death Overs', 'Runs Scored': stats['avg_death_over_runs'], 'Runs Conceded': stats['avg_death_over_runs_conceded']}
+                        ])
+                    
+                    phase_df = pd.DataFrame(phase_data)
+                    
+                    # Runs scored comparison
+                    fig_phase_scored = px.bar(
+                        phase_df, 
+                        x='Team', 
+                        y='Runs Scored',
+                        color='Phase',
+                        title='Phase-wise Runs Scored by Team',
+                        barmode='group'
+                    )
+                    fig_phase_scored.update_xaxis(tickangle=45)
+                    st.plotly_chart(fig_phase_scored, use_container_width=True)
+                    
+                    # Runs conceded comparison
+                    fig_phase_conceded = px.bar(
+                        phase_df, 
+                        x='Team', 
+                        y='Runs Conceded',
+                        color='Phase',
+                        title='Phase-wise Runs Conceded by Team',
+                        barmode='group'
+                    )
+                    fig_phase_conceded.update_xaxis(tickangle=45)
+                    st.plotly_chart(fig_phase_conceded, use_container_width=True)
+                
+                # Export detailed team statistics
+                st.markdown("---")
+                st.subheader("Export Team Statistics")
+                
+                # Create detailed export data
+                detailed_team_data = []
+                for team, stats in team_stats.items():
+                    detailed_team_data.append({
+                        'Team': team,
+                        'Matches_Played': stats['matches_played'],
+                        'Matches_Won': stats['matches_won'],
+                        'Win_Percentage': stats['win_percentage'],
+                        'Avg_Score': stats['avg_score'],
+                        'Highest_Score': stats['highest_score'],
+                        'Lowest_Score': stats['lowest_score'],
+                        'Strike_Rate': stats['strike_rate'],
+                        'Avg_Run_Rate': stats['avg_run_rate'],
+                        'Boundary_Percentage': stats['boundary_percentage'],
+                        'Dot_Ball_Percentage': stats['dot_ball_percentage'],
+                        'Avg_Powerplay_Runs': stats['avg_powerplay_runs'],
+                        'Avg_Death_Over_Runs': stats['avg_death_over_runs'],
+                        'Bowling_Economy': stats['bowling_economy'],
+                        'Bowling_Strike_Rate': stats['bowling_strike_rate'],
+                        'Total_Wickets_Taken': stats['total_wickets_taken'],
+                        'Toss_Win_Percentage': stats['toss_win_percentage'],
+                        'Toss_Win_Match_Win_Rate': stats['toss_win_match_win_rate'],
+                        'Bat_First_Win_Rate': stats['bat_first_win_rate'],
+                        'Bowl_First_Win_Rate': stats['bowl_first_win_rate'],
+                        'Venues_Played': stats['venues_played'],
+                        'Opponents_Faced': stats['opponents_faced']
+                    })
+                
+                detailed_team_df = pd.DataFrame(detailed_team_data)
+                st.download_button(
+                    "Download Detailed Team Statistics CSV",
+                    to_csv(detailed_team_df),
+                    "detailed_team_statistics.csv",
+                    "text/csv"
+                )
+                
+                st.info("""
+                **How to use team statistics for analysis:**
+                
+                1. **Performance Evaluation**: Compare teams across batting, bowling, and overall performance
+                2. **Strategy Planning**: Use phase-wise statistics to plan game strategies
+                3. **Head-to-Head Analysis**: Compare specific teams for match predictions
+                4. **Toss Decision**: Analyze whether teams perform better batting or bowling first
+                5. **Venue Adaptation**: Understand how teams perform across different venues
+                6. **Player Selection**: Use team patterns to inform player selection strategies
                 """)
     else:
         st.info("Please upload one or more JSON files to begin analysis.")
