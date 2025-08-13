@@ -7,7 +7,230 @@ st.set_page_config(layout="wide")
 
 # --- Helper Functions ---
 
-def calculate_markov_chain_stats(data_list):
+def calculate_team_stats(all_deliveries, team_name):
+    """
+    Calculate statistics for a specific team.
+    
+    Args:
+        all_deliveries: List of delivery data
+        team_name: Name of the team to analyze
+    
+    Returns:
+        dict: Team-specific statistics
+    """
+    team_deliveries = [d for d in all_deliveries if d['team'] == team_name]
+    
+    if not team_deliveries:
+        return None
+    
+    total_balls = len(team_deliveries)
+    
+    # Calculate basic statistics for the team
+    team_stats = {
+        'team_name': team_name,
+        'total_balls': total_balls,
+        'avg_runs_per_ball': sum(d['runs_off_bat'] for d in team_deliveries) / total_balls,
+        'avg_run_rate': (sum(d['runs_off_bat'] for d in team_deliveries) / total_balls) * 6,
+        'dot_ball_percentage': (sum(1 for d in team_deliveries if d['is_dot']) / total_balls) * 100,
+        'single_percentage': (sum(1 for d in team_deliveries if d['is_single']) / total_balls) * 100,
+        'four_percentage': (sum(1 for d in team_deliveries if d['is_four']) / total_balls) * 100,
+        'six_percentage': (sum(1 for d in team_deliveries if d['is_six']) / total_balls) * 100,
+        'wicket_percentage': (sum(1 for d in team_deliveries if d['is_wicket']) / total_balls) * 100,
+        'boundary_percentage': (sum(1 for d in team_deliveries if d['is_four'] or d['is_six']) / total_balls) * 100
+    }
+    
+    # Runs distribution for the team
+    for runs in range(7):
+        count = sum(1 for d in team_deliveries if d['runs_off_bat'] == runs)
+        team_stats[f'runs_{runs}_probability'] = (count / total_balls) * 100
+    
+    # Phase-wise statistics for the team
+    for phase in ['powerplay', 'middle', 'death']:
+        phase_deliveries = [d for d in team_deliveries if d['phase'] == phase]
+        if phase_deliveries:
+            phase_balls = len(phase_deliveries)
+            team_stats[f'{phase}_stats'] = {
+                'balls': phase_balls,
+                'avg_runs_per_ball': sum(d['runs_off_bat'] for d in phase_deliveries) / phase_balls,
+                'run_rate': (sum(d['runs_off_bat'] for d in phase_deliveries) / phase_balls) * 6,
+                'dot_ball_percentage': (sum(1 for d in phase_deliveries if d['is_dot']) / phase_balls) * 100,
+                'single_percentage': (sum(1 for d in phase_deliveries if d['is_single']) / phase_balls) * 100,
+                'four_percentage': (sum(1 for d in phase_deliveries if d['is_four']) / phase_balls) * 100,
+                'six_percentage': (sum(1 for d in phase_deliveries if d['is_six']) / phase_balls) * 100,
+                'wicket_percentage': (sum(1 for d in phase_deliveries if d['is_wicket']) / phase_balls) * 100
+            }
+        else:
+            team_stats[f'{phase}_stats'] = None
+    
+    # Additional team-specific metrics
+    wicket_balls = [d for d in team_deliveries if d['is_wicket']]
+    if wicket_balls:
+        team_stats['avg_balls_between_wickets'] = total_balls / len(wicket_balls)
+    
+    boundary_balls = [d for d in team_deliveries if d['is_four'] or d['is_six']]
+    if boundary_balls:
+        team_stats['avg_balls_between_boundaries'] = total_balls / len(boundary_balls)
+    
+    return team_stats
+
+def calculate_venue_wise_stats(data_list):
+    """
+    Calculate venue-wise statistics for cricket matches.
+    
+    Args:
+        data_list: List of cricket match data (JSON format)
+    
+    Returns:
+        dict: Venue-wise statistics including scoring patterns, outcomes, and conditions
+    """
+    venue_stats = {}
+    
+    for data in data_list:
+        venue = data.get('info', {}).get('venue', 'Unknown Venue')
+        
+        if venue not in venue_stats:
+            venue_stats[venue] = {
+                'matches': 0,
+                'total_runs': 0,
+                'total_balls': 0,
+                'total_wickets': 0,
+                'total_fours': 0,
+                'total_sixes': 0,
+                'total_dots': 0,
+                'innings_scores': [],
+                'toss_winners': [],
+                'match_winners': [],
+                'toss_decisions': [],
+                'first_innings_scores': [],
+                'second_innings_scores': [],
+                'powerplay_runs': [],
+                'death_over_runs': [],
+                'team_totals': []
+            }
+        
+        venue_data = venue_stats[venue]
+        venue_data['matches'] += 1
+        
+        # Extract match info
+        info = data.get('info', {})
+        venue_data['toss_winners'].append(info.get('toss', {}).get('winner', 'Unknown'))
+        venue_data['match_winners'].append(info.get('outcome', {}).get('winner', 'No Result'))
+        venue_data['toss_decisions'].append(info.get('toss', {}).get('decision', 'Unknown'))
+        
+        # Process innings
+        for inning_idx, inning in enumerate(data.get('innings', [])):
+            inning_runs = 0
+            inning_balls = 0
+            inning_wickets = 0
+            inning_fours = 0
+            inning_sixes = 0
+            inning_dots = 0
+            powerplay_runs = 0
+            death_over_runs = 0
+            
+            for over in inning.get('overs', []):
+                over_num = over.get('over', 0)
+                
+                for delivery in over.get('deliveries', []):
+                    # Skip extras for ball count
+                    if 'extras' not in delivery or not any(k in delivery['extras'] for k in ['wides', 'noballs']):
+                        inning_balls += 1
+                        venue_data['total_balls'] += 1
+                    
+                    runs = delivery['runs']['batter']
+                    total_runs = delivery['runs']['total']
+                    
+                    inning_runs += total_runs
+                    venue_data['total_runs'] += total_runs
+                    
+                    if runs == 0:
+                        inning_dots += 1
+                        venue_data['total_dots'] += 1
+                    elif runs == 4:
+                        inning_fours += 1
+                        venue_data['total_fours'] += 1
+                    elif runs == 6:
+                        inning_sixes += 1
+                        venue_data['total_sixes'] += 1
+                    
+                    if 'wickets' in delivery:
+                        inning_wickets += 1
+                        venue_data['total_wickets'] += 1
+                    
+                    # Phase-wise runs
+                    if over_num < 6:  # Powerplay
+                        powerplay_runs += total_runs
+                    elif over_num >= 15:  # Death overs
+                        death_over_runs += total_runs
+            
+            venue_data['innings_scores'].append(inning_runs)
+            venue_data['team_totals'].append(inning_runs)
+            venue_data['powerplay_runs'].append(powerplay_runs)
+            venue_data['death_over_runs'].append(death_over_runs)
+            
+            if inning_idx == 0:
+                venue_data['first_innings_scores'].append(inning_runs)
+            elif inning_idx == 1:
+                venue_data['second_innings_scores'].append(inning_runs)
+    
+    # Calculate summary statistics for each venue
+    venue_summary = {}
+    for venue, stats in venue_stats.items():
+        if stats['matches'] > 0:
+            venue_summary[venue] = {
+                'matches': stats['matches'],
+                'avg_total_runs_per_match': sum(stats['team_totals']) / len(stats['team_totals']) if stats['team_totals'] else 0,
+                'avg_runs_per_ball': stats['total_runs'] / stats['total_balls'] if stats['total_balls'] > 0 else 0,
+                'avg_run_rate': (stats['total_runs'] / stats['total_balls'] * 6) if stats['total_balls'] > 0 else 0,
+                'dot_ball_percentage': (stats['total_dots'] / stats['total_balls'] * 100) if stats['total_balls'] > 0 else 0,
+                'four_percentage': (stats['total_fours'] / stats['total_balls'] * 100) if stats['total_balls'] > 0 else 0,
+                'six_percentage': (stats['total_sixes'] / stats['total_balls'] * 100) if stats['total_balls'] > 0 else 0,
+                'boundary_percentage': ((stats['total_fours'] + stats['total_sixes']) / stats['total_balls'] * 100) if stats['total_balls'] > 0 else 0,
+                'wicket_percentage': (stats['total_wickets'] / stats['total_balls'] * 100) if stats['total_balls'] > 0 else 0,
+                'avg_first_innings': sum(stats['first_innings_scores']) / len(stats['first_innings_scores']) if stats['first_innings_scores'] else 0,
+                'avg_second_innings': sum(stats['second_innings_scores']) / len(stats['second_innings_scores']) if stats['second_innings_scores'] else 0,
+                'avg_powerplay_runs': sum(stats['powerplay_runs']) / len(stats['powerplay_runs']) if stats['powerplay_runs'] else 0,
+                'avg_death_over_runs': sum(stats['death_over_runs']) / len(stats['death_over_runs']) if stats['death_over_runs'] else 0,
+                'highest_team_total': max(stats['team_totals']) if stats['team_totals'] else 0,
+                'lowest_team_total': min(stats['team_totals']) if stats['team_totals'] else 0,
+                'toss_win_match_win_rate': 0,
+                'bat_first_win_rate': 0,
+                'bowl_first_win_rate': 0
+            }
+            
+            # Calculate toss and decision impact
+            toss_win_match_win = sum(1 for i, winner in enumerate(stats['match_winners']) 
+                                   if winner == stats['toss_winners'][i] and winner != 'No Result')
+            total_decided_matches = sum(1 for winner in stats['match_winners'] if winner != 'No Result')
+            
+            if total_decided_matches > 0:
+                venue_summary[venue]['toss_win_match_win_rate'] = (toss_win_match_win / total_decided_matches) * 100
+            
+            # Bat first vs bowl first success rates
+            bat_first_wins = 0
+            bowl_first_wins = 0
+            bat_first_matches = 0
+            bowl_first_matches = 0
+            
+            for i, decision in enumerate(stats['toss_decisions']):
+                if i < len(stats['match_winners']) and stats['match_winners'][i] != 'No Result':
+                    if decision == 'bat':
+                        bat_first_matches += 1
+                        if stats['match_winners'][i] == stats['toss_winners'][i]:
+                            bat_first_wins += 1
+                    elif decision == 'field':
+                        bowl_first_matches += 1
+                        if stats['match_winners'][i] == stats['toss_winners'][i]:
+                            bowl_first_wins += 1
+            
+            if bat_first_matches > 0:
+                venue_summary[venue]['bat_first_win_rate'] = (bat_first_wins / bat_first_matches) * 100
+            if bowl_first_matches > 0:
+                venue_summary[venue]['bowl_first_win_rate'] = (bowl_first_wins / bowl_first_matches) * 100
+    
+    return venue_summary
+
+def calculate_markov_chain_stats(data_list, team_wise=False):
     """
     Calculate statistical summaries useful for Markov chain cricket simulation.
     
@@ -110,6 +333,17 @@ def calculate_markov_chain_stats(data_list):
     if boundary_balls:
         stats['boundary_percentage'] = (len(boundary_balls) / total_balls) * 100
         stats['avg_balls_between_boundaries'] = total_balls / len(boundary_balls)
+    
+    # If team-wise analysis is requested, add team-specific statistics
+    if team_wise:
+        unique_teams = list(set(d['team'] for d in all_deliveries))
+        stats['teams_analyzed'] = unique_teams
+        stats['team_stats'] = {}
+        
+        for team in unique_teams:
+            team_data = calculate_team_stats(all_deliveries, team)
+            if team_data:
+                stats['team_stats'][team] = team_data
     
     return stats
 
@@ -324,7 +558,7 @@ if page == "JSON Data Analyzer":
         raw_data, match_summary, bbb, batting_summary, bowling_summary, market_summaries_df = process_all_files(json_files)
 
         st.sidebar.subheader("JSON Analyzer Views")
-        json_page = st.sidebar.radio("Choose a data view", ["Match Summaries", "Aggregated Batting Stats", "Aggregated Bowling Stats", "Combined Ball-by-Ball", "Betting Market Summaries", "Markov Chain Statistics"])
+        json_page = st.sidebar.radio("Choose a data view", ["Match Summaries", "Aggregated Batting Stats", "Aggregated Bowling Stats", "Combined Ball-by-Ball", "Betting Market Summaries", "Markov Chain Statistics", "Venue-wise Statistics"])
         
         st.header(f"Analysis of {len(json_files)} Match(es)")
         st.markdown("---")
@@ -371,8 +605,15 @@ if page == "JSON Data Analyzer":
             st.subheader("Markov Chain Statistics for Cricket Simulation")
             st.info("These statistics are designed for building Markov chain models to simulate cricket matches.")
             
+            # Add option for team-wise analysis
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.write("**Analysis Type:**")
+            with col2:
+                team_wise_analysis = st.checkbox("Team-wise Analysis", value=False, help="Calculate separate statistics for each team")
+            
             # Calculate Markov chain statistics
-            markov_stats = calculate_markov_chain_stats(raw_data)
+            markov_stats = calculate_markov_chain_stats(raw_data, team_wise=team_wise_analysis)
             
             if "error" in markov_stats:
                 st.error(markov_stats["error"])
@@ -456,9 +697,11 @@ if page == "JSON Data Analyzer":
                     st.metric("Four %", f"{markov_stats['four_percentage']:.2f}%")
                     st.metric("Six %", f"{markov_stats['six_percentage']:.2f}%")
                 
-                # Export statistics for use in simulation
-                st.markdown("---")
-                st.subheader("Export for Simulation")
+                # Team-wise analysis section
+                if team_wise_analysis and 'team_stats' in markov_stats and markov_stats['team_stats']:
+                    st.markdown("---")
+                    st.subheader("🏏 Team-wise Markov Chain Statistics")
+                    st.info(f"Analyzing {len(markov_stats['teams_analyzed'])} unique teams: {', '.join(markov_stats['teamst.subheader("Export for Simulation")
                 
                 # Convert stats to DataFrame for download
                 stats_for_export = []
@@ -492,6 +735,231 @@ if page == "JSON Data Analyzer":
                 3. **Wicket Modeling**: Use wicket percentages to model dismissals
                 4. **Boundary Modeling**: Use four/six percentages for aggressive batting scenarios
                 5. **Run Rate Targets**: Use phase-wise run rates for realistic scoring patterns
+                """)
+        
+        elif json_page == "Venue-wise Statistics":
+            st.subheader("Venue-wise Cricket Statistics")
+            st.info("Analyze how different venues affect match outcomes, scoring patterns, and team strategies.")
+            
+            # Calculate venue-wise statistics
+            venue_stats = calculate_venue_wise_stats(raw_data)
+            
+            if not venue_stats:
+                st.warning("No venue data found in the uploaded files.")
+            else:
+                # Overview metrics
+                total_venues = len(venue_stats)
+                total_matches_analyzed = sum(stats['matches'] for stats in venue_stats.values())
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Total Venues", total_venues)
+                with col2:
+                    st.metric("Total Matches", total_matches_analyzed)
+                with col3:
+                    avg_matches_per_venue = total_matches_analyzed / total_venues if total_venues > 0 else 0
+                    st.metric("Avg Matches per Venue", f"{avg_matches_per_venue:.1f}")
+                
+                st.markdown("---")
+                
+                # Venue comparison table
+                st.subheader("Venue Comparison Overview")
+                
+                # Create DataFrame for venue comparison
+                venue_comparison_data = []
+                for venue, stats in venue_stats.items():
+                    venue_comparison_data.append({
+                        'Venue': venue,
+                        'Matches': stats['matches'],
+                        'Avg Run Rate': f"{stats['avg_run_rate']:.2f}",
+                        'Avg 1st Innings': f"{stats['avg_first_innings']:.0f}",
+                        'Avg 2nd Innings': f"{stats['avg_second_innings']:.0f}",
+                        'Boundary %': f"{stats['boundary_percentage']:.1f}%",
+                        'Dot Ball %': f"{stats['dot_ball_percentage']:.1f}%",
+                        'Toss Win = Match Win': f"{stats['toss_win_match_win_rate']:.1f}%",
+                        'Bat First Win Rate': f"{stats['bat_first_win_rate']:.1f}%"
+                    })
+                
+                venue_df = pd.DataFrame(venue_comparison_data)
+                st.dataframe(venue_df, use_container_width=True)
+                
+                # Download venue comparison
+                st.download_button(
+                    "Download Venue Comparison CSV",
+                    to_csv(venue_df),
+                    "venue_comparison.csv",
+                    "text/csv"
+                )
+                
+                st.markdown("---")
+                
+                # Detailed venue analysis
+                st.subheader("Detailed Venue Analysis")
+                
+                # Venue selector
+                selected_venue = st.selectbox(
+                    "Select a venue for detailed analysis:",
+                    options=list(venue_stats.keys()),
+                    index=0
+                )
+                
+                if selected_venue and selected_venue in venue_stats:
+                    venue_data = venue_stats[selected_venue]
+                    
+                    st.write(f"### 🏟️ {selected_venue}")
+                    
+                    # Key metrics for selected venue
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("Matches Played", venue_data['matches'])
+                        st.metric("Avg Run Rate", f"{venue_data['avg_run_rate']:.2f}")
+                    with col2:
+                        st.metric("Highest Total", f"{venue_data['highest_team_total']:.0f}")
+                        st.metric("Lowest Total", f"{venue_data['lowest_team_total']:.0f}")
+                    with col3:
+                        st.metric("Avg 1st Innings", f"{venue_data['avg_first_innings']:.0f}")
+                        st.metric("Avg 2nd Innings", f"{venue_data['avg_second_innings']:.0f}")
+                    with col4:
+                        st.metric("Boundary %", f"{venue_data['boundary_percentage']:.1f}%")
+                        st.metric("Wicket %", f"{venue_data['wicket_percentage']:.2f}%")
+                    
+                    st.markdown("---")
+                    
+                    # Phase-wise analysis for venue
+                    st.write("**Phase-wise Scoring Patterns:**")
+                    phase_col1, phase_col2, phase_col3 = st.columns(3)
+                    
+                    with phase_col1:
+                        st.metric("Avg Powerplay Runs", f"{venue_data['avg_powerplay_runs']:.1f}")
+                    with phase_col2:
+                        st.metric("Avg Death Over Runs", f"{venue_data['avg_death_over_runs']:.1f}")
+                    with phase_col3:
+                        st.metric("Runs per Ball", f"{venue_data['avg_runs_per_ball']:.3f}")
+                    
+                    # Toss and decision impact
+                    st.write("**Toss & Decision Impact:**")
+                    toss_col1, toss_col2, toss_col3 = st.columns(3)
+                    
+                    with toss_col1:
+                        st.metric("Toss Win = Match Win", f"{venue_data['toss_win_match_win_rate']:.1f}%")
+                    with toss_col2:
+                        st.metric("Bat First Win Rate", f"{venue_data['bat_first_win_rate']:.1f}%")
+                    with toss_col3:
+                        st.metric("Bowl First Win Rate", f"{venue_data['bowl_first_win_rate']:.1f}%")
+                
+                st.markdown("---")
+                
+                # Venue comparisons with visualizations
+                st.subheader("Venue Comparisons")
+                
+                # Create visualizations
+                if len(venue_stats) > 1:
+                    # Run rate comparison
+                    run_rate_data = []
+                    for venue, stats in venue_stats.items():
+                        run_rate_data.append({
+                            'Venue': venue[:20] + '...' if len(venue) > 20 else venue,  # Truncate long names
+                            'Run Rate': stats['avg_run_rate'],
+                            'Matches': stats['matches']
+                        })
+                    
+                    run_rate_df = pd.DataFrame(run_rate_data)
+                    fig_run_rate = px.bar(
+                        run_rate_df, 
+                        x='Venue', 
+                        y='Run Rate',
+                        title='Average Run Rate by Venue',
+                        hover_data=['Matches']
+                    )
+                    fig_run_rate.update_xaxis(tickangle=45)
+                    st.plotly_chart(fig_run_rate, use_container_width=True)
+                    
+                    # Boundary percentage comparison
+                    boundary_data = []
+                    for venue, stats in venue_stats.items():
+                        boundary_data.append({
+                            'Venue': venue[:20] + '...' if len(venue) > 20 else venue,
+                            'Boundary %': stats['boundary_percentage'],
+                            'Four %': stats['four_percentage'],
+                            'Six %': stats['six_percentage']
+                        })
+                    
+                    boundary_df = pd.DataFrame(boundary_data)
+                    fig_boundary = px.bar(
+                        boundary_df, 
+                        x='Venue', 
+                        y='Boundary %',
+                        title='Boundary Percentage by Venue',
+                        hover_data=['Four %', 'Six %']
+                    )
+                    fig_boundary.update_xaxis(tickangle=45)
+                    st.plotly_chart(fig_boundary, use_container_width=True)
+                    
+                    # First vs Second innings comparison
+                    innings_data = []
+                    for venue, stats in venue_stats.items():
+                        venue_short = venue[:15] + '...' if len(venue) > 15 else venue
+                        innings_data.extend([
+                            {'Venue': venue_short, 'Innings': '1st Innings', 'Average Score': stats['avg_first_innings']},
+                            {'Venue': venue_short, 'Innings': '2nd Innings', 'Average Score': stats['avg_second_innings']}
+                        ])
+                    
+                    innings_df = pd.DataFrame(innings_data)
+                    fig_innings = px.bar(
+                        innings_df, 
+                        x='Venue', 
+                        y='Average Score',
+                        color='Innings',
+                        title='First vs Second Innings Average Scores by Venue',
+                        barmode='group'
+                    )
+                    fig_innings.update_xaxis(tickangle=45)
+                    st.plotly_chart(fig_innings, use_container_width=True)
+                
+                # Export detailed venue statistics
+                st.markdown("---")
+                st.subheader("Export Venue Statistics")
+                
+                # Create detailed export data
+                detailed_venue_data = []
+                for venue, stats in venue_stats.items():
+                    detailed_venue_data.append({
+                        'Venue': venue,
+                        'Matches': stats['matches'],
+                        'Avg_Run_Rate': stats['avg_run_rate'],
+                        'Avg_Runs_Per_Ball': stats['avg_runs_per_ball'],
+                        'Dot_Ball_Percentage': stats['dot_ball_percentage'],
+                        'Four_Percentage': stats['four_percentage'],
+                        'Six_Percentage': stats['six_percentage'],
+                        'Boundary_Percentage': stats['boundary_percentage'],
+                        'Wicket_Percentage': stats['wicket_percentage'],
+                        'Avg_First_Innings': stats['avg_first_innings'],
+                        'Avg_Second_Innings': stats['avg_second_innings'],
+                        'Avg_Powerplay_Runs': stats['avg_powerplay_runs'],
+                        'Avg_Death_Over_Runs': stats['avg_death_over_runs'],
+                        'Highest_Team_Total': stats['highest_team_total'],
+                        'Lowest_Team_Total': stats['lowest_team_total'],
+                        'Toss_Win_Match_Win_Rate': stats['toss_win_match_win_rate'],
+                        'Bat_First_Win_Rate': stats['bat_first_win_rate'],
+                        'Bowl_First_Win_Rate': stats['bowl_first_win_rate']
+                    })
+                
+                detailed_venue_df = pd.DataFrame(detailed_venue_data)
+                st.download_button(
+                    "Download Detailed Venue Statistics CSV",
+                    to_csv(detailed_venue_df),
+                    "detailed_venue_statistics.csv",
+                    "text/csv"
+                )
+                
+                st.info("""
+                **How to use venue statistics for analysis:**
+                
+                1. **Home Advantage**: Compare team performance at different venues
+                2. **Pitch Conditions**: Use run rates and boundary percentages to understand pitch behavior
+                3. **Toss Impact**: Analyze whether to bat or bowl first at specific venues
+                4. **Match Simulation**: Use venue-specific statistics for more accurate predictions
+                5. **Team Strategy**: Adapt game plans based on venue characteristics
                 """)
     else:
         st.info("Please upload one or more JSON files to begin analysis.")
