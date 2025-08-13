@@ -227,6 +227,21 @@ def calculate_venue_wise_stats(data_list):
                 venue_summary[venue]['bat_first_win_rate'] = (bat_first_wins / bat_first_matches) * 100
             if bowl_first_matches > 0:
                 venue_summary[venue]['bowl_first_win_rate'] = (bowl_first_wins / bowl_first_matches) * 100
+            
+            # Add ball outcome probabilities for Markov chain modeling
+            if stats['total_balls'] > 0:
+                for runs in range(7):  # 0-6 runs
+                    count = 0
+                    # Count occurrences of each run outcome for this venue
+                    for data in data_list:
+                        if data.get('info', {}).get('venue', 'Unknown Venue') == venue:
+                            for inning in data.get('innings', []):
+                                for over in inning.get('overs', []):
+                                    for delivery in over.get('deliveries', []):
+                                        if 'extras' not in delivery or not any(k in delivery['extras'] for k in ['wides', 'noballs']):
+                                            if delivery['runs']['batter'] == runs:
+                                                count += 1
+                    venue_summary[venue][f'runs_{runs}_probability'] = (count / stats['total_balls']) * 100 if stats['total_balls'] > 0 else 0
     
     return venue_summary
 
@@ -430,6 +445,21 @@ def calculate_team_wise_stats(data_list):
                 'avg_powerplay_runs_conceded': sum(stats['powerplay_runs_conceded']) / len(stats['powerplay_runs_conceded']) if stats['powerplay_runs_conceded'] else 0,
                 'avg_death_over_runs_conceded': sum(stats['death_over_runs_conceded']) / len(stats['death_over_runs_conceded']) if stats['death_over_runs_conceded'] else 0
             }
+            
+            # Add ball outcome probabilities for Markov chain modeling
+            if stats['total_balls_faced'] > 0:
+                for runs in range(7):  # 0-6 runs
+                    count = 0
+                    # Count occurrences of each run outcome for this team
+                    for data in data_list:
+                        for inning in data.get('innings', []):
+                            if inning.get('team') == team:  # Only count when this team is batting
+                                for over in inning.get('overs', []):
+                                    for delivery in over.get('deliveries', []):
+                                        if 'extras' not in delivery or not any(k in delivery['extras'] for k in ['wides', 'noballs']):
+                                            if delivery['runs']['batter'] == runs:
+                                                count += 1
+                    team_summary[team][f'runs_{runs}_probability'] = (count / stats['total_balls_faced']) * 100 if stats['total_balls_faced'] > 0 else 0
     
     return team_summary
 
@@ -1053,6 +1083,39 @@ if page == "JSON Data Analyzer":
                     with toss_col3:
                         st.metric("Bowl First Win Rate", f"{venue_data['bowl_first_win_rate']:.1f}%")
                 
+                # Ball outcome probabilities for Markov chain modeling
+                st.markdown("---")
+                st.write("**Ball Outcome Probabilities (for Markov States):**")
+                st.info("These probabilities are essential for Markov chain cricket simulation at this venue.")
+                
+                prob_cols = st.columns(4)
+                for i in range(7):
+                    col_idx = i % 4
+                    prob_key = f'runs_{i}_probability'
+                    if prob_key in venue_data:
+                        prob_cols[col_idx].metric(f"{i} Runs", f"{venue_data[prob_key]:.2f}%")
+                
+                # Create visualization for venue-specific runs distribution
+                venue_runs_data = []
+                for i in range(7):
+                    prob_key = f'runs_{i}_probability'
+                    if prob_key in venue_data:
+                        venue_runs_data.append({
+                            'Runs': str(i),
+                            'Probability': venue_data[prob_key]
+                        })
+                
+                if venue_runs_data:
+                    venue_runs_df = pd.DataFrame(venue_runs_data)
+                    fig_venue_runs = px.bar(
+                        venue_runs_df, 
+                        x='Runs', 
+                        y='Probability',
+                        title=f'Ball Outcome Probabilities at {selected_venue}',
+                        labels={'Probability': 'Probability (%)'}
+                    )
+                    st.plotly_chart(fig_venue_runs, use_container_width=True)
+                
                 st.markdown("---")
                 
                 # Venue comparisons with visualizations
@@ -1311,6 +1374,39 @@ if page == "JSON Data Analyzer":
                         st.metric("Bat First Win Rate", f"{team_data['bat_first_win_rate']:.1f}%")
                     with toss_col4:
                         st.metric("Bowl First Win Rate", f"{team_data['bowl_first_win_rate']:.1f}%")
+                
+                # Ball outcome probabilities for Markov chain modeling
+                st.markdown("---")
+                st.write("**Ball Outcome Probabilities (for Markov States):**")
+                st.info("These probabilities show how this team typically scores runs per ball - essential for Markov chain simulation.")
+                
+                prob_cols = st.columns(4)
+                for i in range(7):
+                    col_idx = i % 4
+                    prob_key = f'runs_{i}_probability'
+                    if prob_key in team_data:
+                        prob_cols[col_idx].metric(f"{i} Runs", f"{team_data[prob_key]:.2f}%")
+                
+                # Create visualization for team-specific runs distribution
+                team_runs_data = []
+                for i in range(7):
+                    prob_key = f'runs_{i}_probability'
+                    if prob_key in team_data:
+                        team_runs_data.append({
+                            'Runs': str(i),
+                            'Probability': team_data[prob_key]
+                        })
+                
+                if team_runs_data:
+                    team_runs_df = pd.DataFrame(team_runs_data)
+                    fig_team_runs = px.bar(
+                        team_runs_df, 
+                        x='Runs', 
+                        y='Probability',
+                        title=f'Ball Outcome Probabilities for {selected_team}',
+                        labels={'Probability': 'Probability (%)'}
+                    )
+                    st.plotly_chart(fig_team_runs, use_container_width=True)
                 
                 st.markdown("---")
                 
