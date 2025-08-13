@@ -904,7 +904,10 @@ if page == "JSON Data Analyzer":
                 if team_wise_analysis and 'team_stats' in markov_stats and markov_stats['team_stats']:
                     st.markdown("---")
                     st.subheader("🏏 Team-wise Markov Chain Statistics")
-                    st.info(f"Analyzing {len(markov_stats['teams_analyzed'])} unique teams: {', '.join(markov_stats['teamst.subheader("Export for Simulation")
+                    st.info(f"Analyzing {len(markov_stats['teams_analyzed'])} unique teams: {', '.join(markov_stats['teams_analyzed'])}")
+                
+                st.markdown("---")
+                st.subheader("Export for Simulation")
                 
                 # Convert stats to DataFrame for download
                 stats_for_export = []
