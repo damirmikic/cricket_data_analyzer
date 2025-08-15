@@ -668,7 +668,7 @@ def get_betting_market_summary_dict(data):
     four_and_six_in_over = "No"
     overs_with_wicket = 0
     for i, inning_data in enumerate(innings):
-        stats = {'team': inning_data.get('team', f'Innings {i+1}'),'total_runs': 0,'powerplay_runs': 0,'runs_overs_7_13': 0, 'runs_overs_14_20': 0, 'highest_over': 0,'fall_of_1st_wicket': 'N/A', 'runs_per_over': [], 'first_over_runs': 0, 'first_6_overs_runs': 0}
+        stats = {'team': inning_data.get('team', f'Innings {i+1}'),'total_runs': 0,'powerplay_runs': 0,'runs_overs_7_13': 0, 'runs_overs_14_20': 0, 'highest_over': 0,'fall_of_1st_wicket': 'N/A', 'runs_per_over': [], 'first_over_runs': 0, 'first_6_overs_runs': 0, 'fours': 0, 'sixes': 0, 'wickets': 0, 'wides': 0}
         running_score = 0
         wicket_fell = False
         for over in inning_data.get('overs', []):
@@ -691,13 +691,31 @@ def get_betting_market_summary_dict(data):
             if has_four and has_six: four_and_six_in_over = "Yes"
             if any('wickets' in d for d in over.get('deliveries', [])): overs_with_wicket += 1
                 
-            if not wicket_fell:
-                for delivery in over.get('deliveries', []):
-                    running_score += delivery['runs']['total']
+            # Count deliveries in this over for detailed stats
+            for delivery in over.get('deliveries', []):
+                runs = delivery['runs']['batter']
+                total_runs = delivery['runs']['total']
+                
+                # Count fours and sixes
+                if runs == 4:
+                    stats['fours'] += 1
+                elif runs == 6:
+                    stats['sixes'] += 1
+                
+                # Count wickets
+                if 'wickets' in delivery:
+                    stats['wickets'] += 1
+                
+                # Count wides
+                if 'extras' in delivery and 'wides' in delivery['extras']:
+                    stats['wides'] += delivery['extras']['wides']
+                
+                # Track fall of first wicket
+                if not wicket_fell:
+                    running_score += total_runs
                     if 'wickets' in delivery:
                         stats['fall_of_1st_wicket'] = running_score
                         wicket_fell = True
-                        break
         stats['total_runs'] = sum(d['runs']['total'] for o in inning_data.get('overs', []) for d in o.get('deliveries', []))
         inning_stats.append(stats)
         
@@ -722,7 +740,28 @@ def get_betting_market_summary_dict(data):
         'Man of the Match': info.get('player_of_match', ['N/A'])[0],
         'Toss Winner': info.get('toss', {}).get('winner', 'N/A'),
         'Four and Six in an Over': four_and_six_in_over,
-        'Overs with a Wicket': overs_with_wicket
+        'Overs with a Wicket': overs_with_wicket,
+        
+        # Additional betting market statistics
+        'Max Over in Match': max([inning_stats[i]['highest_over'] for i in range(len(inning_stats))]) if inning_stats else 0,
+        'Match Fours': sum([inning_stats[i]['fours'] for i in range(len(inning_stats))]) if inning_stats else 0,
+        'Match Sixes': sum([inning_stats[i]['sixes'] for i in range(len(inning_stats))]) if inning_stats else 0,
+        'Match Wickets': sum([inning_stats[i]['wickets'] for i in range(len(inning_stats))]) if inning_stats else 0,
+        'Match Wides': sum([inning_stats[i]['wides'] for i in range(len(inning_stats))]) if inning_stats else 0,
+        
+        # Innings 1 detailed statistics
+        'Innings 1 Fours': inning_stats[0]['fours'] if len(inning_stats) > 0 else 0,
+        'Innings 1 Sixes': inning_stats[0]['sixes'] if len(inning_stats) > 0 else 0,
+        'Innings 1 Runs at Fall of 1st Wicket': inning_stats[0]['fall_of_1st_wicket'] if len(inning_stats) > 0 else 'N/A',
+        'Innings 1 Highest Over': inning_stats[0]['highest_over'] if len(inning_stats) > 0 else 0,
+        'Innings 1 Wickets': inning_stats[0]['wickets'] if len(inning_stats) > 0 else 0,
+        
+        # Innings 2 detailed statistics
+        'Innings 2 Fours': inning_stats[1]['fours'] if len(inning_stats) > 1 else 0,
+        'Innings 2 Sixes': inning_stats[1]['sixes'] if len(inning_stats) > 1 else 0,
+        'Innings 2 Runs at Fall of 1st Wicket': inning_stats[1]['fall_of_1st_wicket'] if len(inning_stats) > 1 else 'N/A',
+        'Innings 2 Highest Over': inning_stats[1]['highest_over'] if len(inning_stats) > 1 else 0,
+        'Innings 2 Wickets': inning_stats[1]['wickets'] if len(inning_stats) > 1 else 0
     }
     return summary_dict
 
