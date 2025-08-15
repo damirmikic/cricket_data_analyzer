@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import json
 import plotly.express as px
+from betting_markets import calculate_betting_markets, format_betting_markets_for_display
 
 st.set_page_config(layout="wide")
 
@@ -870,6 +871,10 @@ page = st.sidebar.radio("Choose an analyzer", nav_options)
 if page == "JSON Data Analyzer":
     if json_files:
         raw_data, match_summary, bbb, batting_summary, bowling_summary, market_summaries_df = process_all_files(json_files)
+        
+        # Calculate comprehensive betting markets
+        betting_markets = calculate_betting_markets(raw_data)
+        formatted_betting_markets = format_betting_markets_for_display(betting_markets)
 
         st.sidebar.subheader("JSON Analyzer Views")
         json_page = st.sidebar.radio("Choose a data view", ["Match Summaries", "Aggregated Batting Stats", "Aggregated Bowling Stats", "Combined Ball-by-Ball", "Betting Market Summaries", "Markov Chain Statistics", "Venue-wise Statistics", "Team-wise Statistics"])
@@ -898,22 +903,307 @@ if page == "JSON Data Analyzer":
             st.download_button("Download Ball-by-Ball CSV", to_csv(bbb), "combined_ball_by_ball.csv", "text/csv")
         
         elif json_page == "Betting Market Summaries":
-            st.subheader("Betting Market Summaries")
-            if not market_summaries_df.empty:
-                st.download_button(label="Download All Summaries (Concatenated CSV)",data=to_csv(market_summaries_df),file_name="all_market_summaries.csv",mime="text/csv")
+            st.subheader("🎯 Comprehensive Betting Markets Analysis")
+            st.info("Complete analysis of all betting markets from your cricket matches. All markets you requested are calculated below.")
+            
+            if formatted_betting_markets:
+                # Create tabs for different market categories
+                market_tabs = st.tabs([
+                    "Match Outcomes", "Runs Markets", "Team Markets", 
+                    "Individual Performance", "Phase Markets", "Special Markets",
+                    "Wicket Markets", "Partnership Markets"
+                ])
+                
+                with market_tabs[0]:  # Match Outcomes
+                    st.subheader("Match Outcome Markets")
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.write("**Match Winner**")
+                        match_winner = formatted_betting_markets['Match Outcome Markets']['Match Winner']
+                        for outcome, count in match_winner.items():
+                            st.metric(outcome.replace('_', ' ').title(), count)
+                        
+                        st.write("**Most Sixes**")
+                        most_sixes = formatted_betting_markets['Match Outcome Markets']['Most Sixes']
+                        for outcome, count in most_sixes.items():
+                            st.metric(outcome.replace('_', ' ').title(), count)
+                    
+                    with col2:
+                        st.write("**Toss Winner**")
+                        toss_winner = formatted_betting_markets['Match Outcome Markets']['Toss Winner']
+                        for outcome, count in toss_winner.items():
+                            st.metric(outcome.replace('_', ' ').title(), count)
+                        
+                        st.write("**Most Fours**")
+                        most_fours = formatted_betting_markets['Match Outcome Markets']['Most Fours']
+                        for outcome, count in most_fours.items():
+                            st.metric(outcome.replace('_', ' ').title(), count)
+                
+                with market_tabs[1]:  # Runs Markets
+                    st.subheader("Runs Markets - Over/Under Analysis")
+                    
+                    runs_markets = formatted_betting_markets['Runs Markets']
+                    
+                    for market_name, market_data in runs_markets.items():
+                        if isinstance(market_data, dict) and 'Average' in market_data:
+                            st.write(f"**{market_name}**")
+                            col1, col2, col3, col4 = st.columns(4)
+                            
+                            with col1:
+                                st.metric("Average", f"{market_data['Average']:.1f}")
+                            with col2:
+                                st.metric("Median", market_data['Median'])
+                            with col3:
+                                st.metric("Min", market_data['Min'])
+                            with col4:
+                                st.metric("Max", market_data['Max'])
+                            
+                            # Over/Under analysis
+                            if 'Over/Under Lines' in market_data and market_data['Over/Under Lines']:
+                                st.write("Over/Under Analysis:")
+                                over_under_data = []
+                                for line_key, line_data in market_data['Over/Under Lines'].items():
+                                    line_value = line_key.replace('line_', '')
+                                    over_under_data.append({
+                                        'Line': line_value,
+                                        'Over %': f"{line_data['over_percentage']:.1f}%",
+                                        'Under %': f"{line_data['under_percentage']:.1f}%",
+                                        'Over Count': line_data['over_count'],
+                                        'Under Count': line_data['under_count']
+                                    })
+                                
+                                if over_under_data:
+                                    st.dataframe(pd.DataFrame(over_under_data), use_container_width=True)
+                            
+                            st.markdown("---")
+                
+                with market_tabs[2]:  # Team Markets
+                    st.subheader("Team-Specific Markets")
+                    
+                    team_markets = formatted_betting_markets['Team Markets']
+                    
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.write("**Home Team Markets**")
+                        for market_name, market_data in team_markets.items():
+                            if 'Home' in market_name and isinstance(market_data, dict) and 'Average' in market_data:
+                                st.write(f"*{market_name}*")
+                                subcol1, subcol2 = st.columns(2)
+                                with subcol1:
+                                    st.metric("Avg", f"{market_data['Average']:.1f}")
+                                with subcol2:
+                                    st.metric("Range", f"{market_data['Min']}-{market_data['Max']}")
+                    
+                    with col2:
+                        st.write("**Away Team Markets**")
+                        for market_name, market_data in team_markets.items():
+                            if 'Away' in market_name and isinstance(market_data, dict) and 'Average' in market_data:
+                                st.write(f"*{market_name}*")
+                                subcol1, subcol2 = st.columns(2)
+                                with subcol1:
+                                    st.metric("Avg", f"{market_data['Average']:.1f}")
+                                with subcol2:
+                                    st.metric("Range", f"{market_data['Min']}-{market_data['Max']}")
+                
+                with market_tabs[3]:  # Individual Performance
+                    st.subheader("Individual Performance Markets")
+                    
+                    individual_markets = formatted_betting_markets['Individual Performance']
+                    
+                    for market_name, market_data in individual_markets.items():
+                        if isinstance(market_data, dict) and 'Average' in market_data:
+                            st.write(f"**{market_name}**")
+                            col1, col2, col3, col4 = st.columns(4)
+                            
+                            with col1:
+                                st.metric("Average", f"{market_data['Average']:.1f}")
+                            with col2:
+                                st.metric("Median", market_data['Median'])
+                            with col3:
+                                st.metric("Min", market_data['Min'])
+                            with col4:
+                                st.metric("Max", market_data['Max'])
+                            
+                            st.markdown("---")
+                
+                with market_tabs[4]:  # Phase Markets
+                    st.subheader("Phase-wise Runs Markets")
+                    
+                    phase_markets = formatted_betting_markets['Phase Markets']
+                    
+                    for market_name, market_data in phase_markets.items():
+                        if isinstance(market_data, dict) and 'Average' in market_data:
+                            st.write(f"**{market_name}**")
+                            col1, col2, col3, col4 = st.columns(4)
+                            
+                            with col1:
+                                st.metric("Average", f"{market_data['Average']:.1f}")
+                            with col2:
+                                st.metric("Median", market_data['Median'])
+                            with col3:
+                                st.metric("Min", market_data['Min'])
+                            with col4:
+                                st.metric("Max", market_data['Max'])
+                            
+                            # Over/Under analysis for phase markets
+                            if 'Over/Under Lines' in market_data and market_data['Over/Under Lines']:
+                                st.write("Over/Under Analysis:")
+                                over_under_data = []
+                                for line_key, line_data in market_data['Over/Under Lines'].items():
+                                    line_value = line_key.replace('line_', '')
+                                    over_under_data.append({
+                                        'Line': line_value,
+                                        'Over %': f"{line_data['over_percentage']:.1f}%",
+                                        'Under %': f"{line_data['under_percentage']:.1f}%"
+                                    })
+                                
+                                if over_under_data:
+                                    st.dataframe(pd.DataFrame(over_under_data), use_container_width=True)
+                            
+                            st.markdown("---")
+                
+                with market_tabs[5]:  # Special Markets
+                    st.subheader("Special Betting Markets")
+                    
+                    special_markets = formatted_betting_markets['Special Markets']
+                    
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        for i, (market_name, market_data) in enumerate(special_markets.items()):
+                            if i % 2 == 0:
+                                st.write(f"**{market_name}**")
+                                if isinstance(market_data, dict):
+                                    for outcome, count in market_data.items():
+                                        st.metric(outcome.replace('_', ' ').title(), count)
+                                st.markdown("---")
+                    
+                    with col2:
+                        for i, (market_name, market_data) in enumerate(special_markets.items()):
+                            if i % 2 == 1:
+                                st.write(f"**{market_name}**")
+                                if isinstance(market_data, dict):
+                                    for outcome, count in market_data.items():
+                                        st.metric(outcome.replace('_', ' ').title(), count)
+                                st.markdown("---")
+                
+                with market_tabs[6]:  # Wicket Markets
+                    st.subheader("Wicket-Related Markets")
+                    
+                    wicket_markets = formatted_betting_markets['Wicket Markets']
+                    
+                    for market_name, market_data in wicket_markets.items():
+                        if isinstance(market_data, dict) and 'Average' in market_data:
+                            st.write(f"**{market_name}**")
+                            col1, col2, col3, col4 = st.columns(4)
+                            
+                            with col1:
+                                st.metric("Average", f"{market_data['Average']:.1f}")
+                            with col2:
+                                st.metric("Median", market_data['Median'])
+                            with col3:
+                                st.metric("Min", market_data['Min'])
+                            with col4:
+                                st.metric("Max", market_data['Max'])
+                            
+                            st.markdown("---")
+                
+                with market_tabs[7]:  # Partnership Markets
+                    st.subheader("Partnership Markets")
+                    
+                    partnership_markets = formatted_betting_markets['Partnership Markets']
+                    
+                    for market_name, market_data in partnership_markets.items():
+                        if isinstance(market_data, dict) and 'Average' in market_data:
+                            st.write(f"**{market_name}**")
+                            col1, col2, col3, col4 = st.columns(4)
+                            
+                            with col1:
+                                st.metric("Average", f"{market_data['Average']:.1f}")
+                            with col2:
+                                st.metric("Median", market_data['Median'])
+                            with col3:
+                                st.metric("Min", market_data['Min'])
+                            with col4:
+                                st.metric("Max", market_data['Max'])
+                            
+                            # Over/Under analysis for partnership markets
+                            if 'Over/Under Lines' in market_data and market_data['Over/Under Lines']:
+                                st.write("Over/Under Analysis:")
+                                over_under_data = []
+                                for line_key, line_data in market_data['Over/Under Lines'].items():
+                                    line_value = line_key.replace('line_', '')
+                                    over_under_data.append({
+                                        'Line': line_value,
+                                        'Over %': f"{line_data['over_percentage']:.1f}%",
+                                        'Under %': f"{line_data['under_percentage']:.1f}%"
+                                    })
+                                
+                                if over_under_data:
+                                    st.dataframe(pd.DataFrame(over_under_data), use_container_width=True)
+                            
+                            st.markdown("---")
+                
+                # Export section
                 st.markdown("---")
-                st.info("Displaying individual summaries for each match uploaded.")
-                for match_summary_dict in market_summaries_df.to_dict('records'):
-                    match_id = match_summary_dict.get('match_id', 'Unknown_Match')
-                    with st.expander(f"**Match ID: {match_id}**"):
-                        col1, col2 = st.columns(2)
-                        for i, (key, value) in enumerate(match_summary_dict.items()):
-                            if i % 2 == 0: col1.markdown(f"**{key}:** {value}")
-                            else: col2.markdown(f"**{key}:** {value}")
-                        single_match_df = pd.DataFrame([match_summary_dict])
-                        st.download_button(label=f"Download Summary for {match_id}",data=to_csv(single_match_df),file_name=f"market_summary_{match_id.replace('.json','')}.csv",mime="text/csv",key=f"download_{match_id}")
+                st.subheader("📊 Export Betting Markets Data")
+                
+                # Create comprehensive export data
+                export_data = []
+                for category, markets in formatted_betting_markets.items():
+                    for market_name, market_data in markets.items():
+                        if isinstance(market_data, dict):
+                            if 'Average' in market_data:
+                                # Numeric market
+                                export_data.append({
+                                    'Category': category,
+                                    'Market': market_name,
+                                    'Type': 'Numeric',
+                                    'Average': market_data['Average'],
+                                    'Median': market_data['Median'],
+                                    'Min': market_data['Min'],
+                                    'Max': market_data['Max'],
+                                    'Sample_Size': market_data['Sample Size']
+                                })
+                            else:
+                                # Categorical market
+                                for outcome, count in market_data.items():
+                                    export_data.append({
+                                        'Category': category,
+                                        'Market': market_name,
+                                        'Type': 'Categorical',
+                                        'Outcome': outcome,
+                                        'Count': count,
+                                        'Average': None,
+                                        'Median': None,
+                                        'Min': None,
+                                        'Max': None,
+                                        'Sample_Size': None
+                                    })
+                
+                if export_data:
+                    export_df = pd.DataFrame(export_data)
+                    st.download_button(
+                        label="📥 Download Complete Betting Markets Analysis",
+                        data=to_csv(export_df),
+                        file_name="comprehensive_betting_markets.csv",
+                        mime="text/csv"
+                    )
+                
+                # Legacy export for compatibility
+                if not market_summaries_df.empty:
+                    st.download_button(
+                        label="📥 Download Legacy Market Summaries",
+                        data=to_csv(market_summaries_df),
+                        file_name="legacy_market_summaries.csv",
+                        mime="text/csv"
+                    )
+            
             else:
-                st.warning("Could not generate market summaries from the uploaded files.")
+                st.warning("Could not generate betting market analysis from the uploaded files.")
+                st.info("Please ensure your JSON files contain valid cricket match data with innings information.")
         
         elif json_page == "Markov Chain Statistics":
             st.subheader("Markov Chain Statistics for Cricket Simulation")

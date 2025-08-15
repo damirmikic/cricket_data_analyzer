@@ -8,7 +8,7 @@ A comprehensive Streamlit application for analyzing cricket match data with adva
 - **Match Summaries**: Standardized match information and outcomes
 - **Player Statistics**: Aggregated batting and bowling stats across matches
 - **Ball-by-Ball Data**: Detailed delivery-level analysis
-- **Betting Market Summaries**: Comprehensive match outcome data
+- **Comprehensive Betting Markets**: Complete analysis of 39+ betting markets with over/under analysis
 
 ### 🎯 Markov Chain Statistics (NEW!)
 Advanced statistical analysis specifically designed for cricket simulation:
@@ -17,6 +17,37 @@ Advanced statistical analysis specifically designed for cricket simulation:
 - **Run Rate Patterns**: Expected scoring rates by match phase
 - **Wicket & Boundary Analysis**: Fall patterns and frequencies
 - **Transition Probabilities**: Ready-to-use data for Markov chain models
+
+### 🎯 Comprehensive Betting Markets (NEW!)
+Complete analysis of 39+ betting markets with statistical insights:
+
+#### Match Outcome Markets
+- **Match Winner**: Team 1/Tie/Team 2 outcomes
+- **Toss Winner**: Toss decision impact analysis
+- **Most Sixes/Fours**: Team comparison markets
+- **Most Runs Out**: Extras comparison
+
+#### Runs Markets (Over/Under Analysis)
+- **Total Runs**: Match total with multiple over/under lines
+- **Match Fours/Sixes/Boundaries**: Boundary counting markets
+- **Runs at Fall 1st Wicket**: Partnership analysis
+- **Phase-wise Runs**: First 6/10/15 overs analysis
+
+#### Team-Specific Markets
+- **Home/Away Team Fours/Sixes/Boundaries**: Individual team performance
+- **Home/Away Highest Individual Score**: Top batsman markets
+- **Home/Away Most Runs Single Over**: Power-hitting analysis
+
+#### Special Markets
+- **Milestone Markets**: 50/100 scored (Yes/No for overall and teams)
+- **First Ball Markets**: Dot ball probability
+- **Six Boundaries in Over**: Power-play analysis
+- **First Scoring Shot**: Single/Two/Three/Four/Six/Others
+- **First Wicket Method**: Caught/Bowled/LBW/Run Out/Stumped/Others
+
+#### Wicket Markets
+- **Wickets Caught**: Team-wise catching analysis
+- **Partnership Markets**: Opening partnership analysis
 
 ### 📈 CSV Analysis Tools
 - **Descriptive Statistics**: Summary of numerical data
