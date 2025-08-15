@@ -567,6 +567,42 @@ def calculate_markov_chain_stats(data_list, team_wise=False):
         stats['boundary_percentage'] = (len(boundary_balls) / total_balls) * 100
         stats['avg_balls_between_boundaries'] = total_balls / len(boundary_balls)
     
+    # First over and first 6 overs analysis
+    first_over_runs = []
+    first_6_overs_runs = []
+    
+    for data in data_list:
+        for inning in data.get('innings', []):
+            first_over_total = 0
+            first_6_overs_total = 0
+            
+            for over in inning.get('overs', []):
+                over_num = over.get('over', 0)
+                over_runs = sum(d['runs']['total'] for d in over.get('deliveries', []))
+                
+                if over_num == 0:  # First over (0-indexed)
+                    first_over_total = over_runs
+                    first_over_runs.append(over_runs)
+                
+                if over_num < 6:  # First 6 overs (powerplay)
+                    first_6_overs_total += over_runs
+            
+            if first_6_overs_total > 0:
+                first_6_overs_runs.append(first_6_overs_total)
+    
+    # Calculate first over and first 6 overs statistics
+    if first_over_runs:
+        stats['avg_first_over_runs'] = sum(first_over_runs) / len(first_over_runs)
+        stats['max_first_over_runs'] = max(first_over_runs)
+        stats['min_first_over_runs'] = min(first_over_runs)
+        stats['first_over_run_rate'] = stats['avg_first_over_runs']  # Already per over
+    
+    if first_6_overs_runs:
+        stats['avg_first_6_overs_runs'] = sum(first_6_overs_runs) / len(first_6_overs_runs)
+        stats['max_first_6_overs_runs'] = max(first_6_overs_runs)
+        stats['min_first_6_overs_runs'] = min(first_6_overs_runs)
+        stats['first_6_overs_run_rate'] = stats['avg_first_6_overs_runs'] / 6  # Per over rate
+    
     # If team-wise analysis is requested, add team-specific statistics
     if team_wise:
         unique_teams = list(set(d['team'] for d in all_deliveries))
@@ -632,7 +668,7 @@ def get_betting_market_summary_dict(data):
     four_and_six_in_over = "No"
     overs_with_wicket = 0
     for i, inning_data in enumerate(innings):
-        stats = {'team': inning_data.get('team', f'Innings {i+1}'),'total_runs': 0,'powerplay_runs': 0,'runs_overs_7_13': 0, 'runs_overs_14_20': 0, 'highest_over': 0,'fall_of_1st_wicket': 'N/A', 'runs_per_over': []}
+        stats = {'team': inning_data.get('team', f'Innings {i+1}'),'total_runs': 0,'powerplay_runs': 0,'runs_overs_7_13': 0, 'runs_overs_14_20': 0, 'highest_over': 0,'fall_of_1st_wicket': 'N/A', 'runs_per_over': [], 'first_over_runs': 0, 'first_6_overs_runs': 0}
         running_score = 0
         wicket_fell = False
         for over in inning_data.get('overs', []):
@@ -642,7 +678,11 @@ def get_betting_market_summary_dict(data):
             stats['runs_per_over'].append(over_runs)
             if over_runs > stats['highest_over']: stats['highest_over'] = over_runs
             
-            if over_num < 6: stats['powerplay_runs'] += over_runs
+            if over_num < 6: 
+                stats['powerplay_runs'] += over_runs
+                stats['first_6_overs_runs'] += over_runs
+            if over_num == 0:  # First over (0-indexed)
+                stats['first_over_runs'] = over_runs
             if 6 <= over_num <= 12: stats['runs_overs_7_13'] += over_runs
             if 13 <= over_num <= 19: stats['runs_overs_14_20'] += over_runs
 
@@ -667,11 +707,13 @@ def get_betting_market_summary_dict(data):
         'Tied Match': 'Yes' if info.get('outcome', {}).get('result') == 'tie' else 'No',
         'Innings 1 Team': inning_stats[0]['team'] if len(inning_stats) > 0 else 'N/A',
         'Innings 1 Runs': inning_stats[0]['total_runs'] if len(inning_stats) > 0 else 0,
+        'Innings 1 First Over Runs': inning_stats[0]['first_over_runs'] if len(inning_stats) > 0 else 0,
         'Innings 1 Runs (Overs 1-6)': inning_stats[0]['powerplay_runs'] if len(inning_stats) > 0 else 0,
         'Innings 1 Runs (Overs 7-13)': inning_stats[0]['runs_overs_7_13'] if len(inning_stats) > 0 else 0,
         'Innings 1 Runs (Overs 14-20)': inning_stats[0]['runs_overs_14_20'] if len(inning_stats) > 0 else 0,
         'Innings 2 Team': inning_stats[1]['team'] if len(inning_stats) > 1 else 'N/A',
         'Innings 2 Runs': inning_stats[1]['total_runs'] if len(inning_stats) > 1 else 0,
+        'Innings 2 First Over Runs': inning_stats[1]['first_over_runs'] if len(inning_stats) > 1 else 0,
         'Innings 2 Runs (Overs 1-6)': inning_stats[1]['powerplay_runs'] if len(inning_stats) > 1 else 0,
         'Innings 2 Runs (Overs 7-13)': inning_stats[1]['runs_overs_7_13'] if len(inning_stats) > 1 else 0,
         'Innings 2 Runs (Overs 14-20)': inning_stats[1]['runs_overs_14_20'] if len(inning_stats) > 1 else 0,
@@ -862,6 +904,24 @@ if page == "JSON Data Analyzer":
                 with col3:
                     st.metric("Dot Ball %", f"{markov_stats['dot_ball_percentage']:.1f}%")
                     st.metric("Boundary %", f"{markov_stats.get('boundary_percentage', 0):.1f}%")
+                
+                # First over and first 6 overs statistics
+                st.markdown("---")
+                st.subheader("First Over & Powerplay Analysis")
+                
+                first_over_col1, first_over_col2, first_over_col3, first_over_col4 = st.columns(4)
+                with first_over_col1:
+                    if 'avg_first_over_runs' in markov_stats:
+                        st.metric("Avg First Over Runs", f"{markov_stats['avg_first_over_runs']:.1f}")
+                with first_over_col2:
+                    if 'max_first_over_runs' in markov_stats:
+                        st.metric("Max First Over Runs", f"{markov_stats['max_first_over_runs']}")
+                with first_over_col3:
+                    if 'avg_first_6_overs_runs' in markov_stats:
+                        st.metric("Avg First 6 Overs", f"{markov_stats['avg_first_6_overs_runs']:.1f}")
+                with first_over_col4:
+                    if 'first_6_overs_run_rate' in markov_stats:
+                        st.metric("First 6 Overs Rate", f"{markov_stats['first_6_overs_run_rate']:.2f}")
                 
                 st.markdown("---")
                 
