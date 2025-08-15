@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import json
 import plotly.express as px
-from betting_markets import calculate_betting_markets, format_betting_markets_for_display
+from betting_markets import calculate_betting_markets, format_betting_markets_for_display, calculate_custom_over_under
 
 st.set_page_config(layout="wide")
 
@@ -985,7 +985,6 @@ if page == "JSON Data Analyzer":
                                 )
                                 
                                 # Calculate custom over/under
-                                from betting_markets import calculate_custom_over_under
                                 custom_result = calculate_custom_over_under(data_list, custom_line)
                                 
                                 if 'error' not in custom_result:
@@ -1114,7 +1113,6 @@ if page == "JSON Data Analyzer":
                                 )
                                 
                                 # Calculate custom over/under
-                                from betting_markets import calculate_custom_over_under
                                 custom_result = calculate_custom_over_under(data_list, custom_line)
                                 
                                 if 'error' not in custom_result:
@@ -1292,7 +1290,6 @@ if page == "JSON Data Analyzer":
                                 )
                                 
                                 # Calculate custom over/under
-                                from betting_markets import calculate_custom_over_under
                                 custom_result = calculate_custom_over_under(data_list, custom_line)
                                 
                                 if 'error' not in custom_result:
