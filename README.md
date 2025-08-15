@@ -18,36 +18,42 @@ Advanced statistical analysis specifically designed for cricket simulation:
 - **Wicket & Boundary Analysis**: Fall patterns and frequencies
 - **Transition Probabilities**: Ready-to-use data for Markov chain models
 
-### 🎯 Comprehensive Betting Markets (NEW!)
-Complete analysis of 39+ betting markets with statistical insights:
+### 🎯 Comprehensive Betting Markets (ENHANCED!)
+Complete analysis of 39+ betting markets with advanced statistical insights and interactive features:
 
-#### Match Outcome Markets
-- **Match Winner**: Team 1/Tie/Team 2 outcomes
-- **Toss Winner**: Toss decision impact analysis
-- **Most Sixes/Fours**: Team comparison markets
-- **Most Runs Out**: Extras comparison
+#### Match Outcome Markets (with Percentages)
+- **Match Winner**: Team 1/Tie/Team 2 outcomes with win percentages
+- **Toss Winner**: Toss decision impact analysis with percentages
+- **Most Sixes/Fours**: Team comparison markets with percentages
+- **Most Runs Out**: Extras comparison with percentages
 
-#### Runs Markets (Over/Under Analysis)
-- **Total Runs**: Match total with multiple over/under lines
-- **Match Fours/Sixes/Boundaries**: Boundary counting markets
-- **Runs at Fall 1st Wicket**: Partnership analysis
-- **Phase-wise Runs**: First 6/10/15 overs analysis
+#### Runs Markets (Interactive Over/Under Analysis)
+- **Total Runs**: Match total with custom over/under line input
+- **Match Fours/Sixes/Boundaries**: Boundary counting with interactive analysis
+- **Runs at Fall 1st Wicket**: Partnership analysis with custom lines
+- **Phase-wise Runs**: First 6/10/15 overs analysis (1st innings only)
 
 #### Team-Specific Markets
 - **Home/Away Team Fours/Sixes/Boundaries**: Individual team performance
 - **Home/Away Highest Individual Score**: Top batsman markets
 - **Home/Away Most Runs Single Over**: Power-hitting analysis
 
-#### Special Markets
-- **Milestone Markets**: 50/100 scored (Yes/No for overall and teams)
-- **First Ball Markets**: Dot ball probability
-- **Six Boundaries in Over**: Power-play analysis
-- **First Scoring Shot**: Single/Two/Three/Four/Six/Others
-- **First Wicket Method**: Caught/Bowled/LBW/Run Out/Stumped/Others
+#### Special Markets (with Percentages)
+- **Milestone Markets**: 50/100 scored (Yes/No) with percentages for overall and teams
+- **First Ball Markets**: Dot ball probability with percentages
+- **Six Boundaries in Over**: Power-play analysis with percentages
+- **First Scoring Shot**: Single/Two/Three/Four/Six/Others with percentages
+- **First Wicket Method**: Caught/Bowled/LBW/Run Out/Stumped/Others with percentages
 
 #### Wicket Markets
 - **Wickets Caught**: Team-wise catching analysis
-- **Partnership Markets**: Opening partnership analysis
+- **Partnership Markets**: Enhanced opening partnership analysis with match outcome tracking
+
+#### 🆕 New Interactive Features
+- **Custom Over/Under Lines**: Enter any value to get instant over/under percentages
+- **Real-time Calculations**: Dynamic percentage calculations based on your input
+- **Match Outcome Tracking**: See how opening partnerships correlate with match wins
+- **Enhanced Percentages**: All categorical markets now show both counts and percentages
 
 ### 📈 CSV Analysis Tools
 - **Descriptive Statistics**: Summary of numerical data

@@ -941,7 +941,7 @@ if page == "JSON Data Analyzer":
                             st.metric(outcome.replace('_', ' ').title(), count)
                 
                 with market_tabs[1]:  # Runs Markets
-                    st.subheader("Runs Markets - Over/Under Analysis")
+                    st.subheader("Runs Markets - Interactive Over/Under Analysis")
                     
                     runs_markets = formatted_betting_markets['Runs Markets']
                     
@@ -959,22 +959,66 @@ if page == "JSON Data Analyzer":
                             with col4:
                                 st.metric("Max", market_data['Max'])
                             
-                            # Over/Under analysis
-                            if 'Over/Under Lines' in market_data and market_data['Over/Under Lines']:
-                                st.write("Over/Under Analysis:")
-                                over_under_data = []
-                                for line_key, line_data in market_data['Over/Under Lines'].items():
-                                    line_value = line_key.replace('line_', '')
-                                    over_under_data.append({
-                                        'Line': line_value,
-                                        'Over %': f"{line_data['over_percentage']:.1f}%",
-                                        'Under %': f"{line_data['under_percentage']:.1f}%",
-                                        'Over Count': line_data['over_count'],
-                                        'Under Count': line_data['under_count']
-                                    })
+                            # Interactive Over/Under analysis
+                            st.write("**Custom Over/Under Analysis:**")
+                            
+                            # Get the raw data for custom analysis
+                            raw_market_data = betting_markets.get(market_name.lower().replace(' ', '_').replace('match_', ''), {})
+                            data_key = None
+                            for key in ['runs', 'fours', 'sixes', 'boundaries']:
+                                if key in raw_market_data and isinstance(raw_market_data[key], list):
+                                    data_key = key
+                                    break
+                            
+                            if data_key and raw_market_data[data_key]:
+                                data_list = raw_market_data[data_key]
                                 
-                                if over_under_data:
-                                    st.dataframe(pd.DataFrame(over_under_data), use_container_width=True)
+                                # User input for custom line
+                                default_line = int(market_data['Average'])
+                                custom_line = st.number_input(
+                                    f"Enter your over/under line for {market_name}:",
+                                    min_value=0,
+                                    max_value=int(market_data['Max']) + 50,
+                                    value=default_line,
+                                    step=1,
+                                    key=f"line_{market_name.replace(' ', '_')}"
+                                )
+                                
+                                # Calculate custom over/under
+                                from betting_markets import calculate_custom_over_under
+                                custom_result = calculate_custom_over_under(data_list, custom_line)
+                                
+                                if 'error' not in custom_result:
+                                    col_over, col_under = st.columns(2)
+                                    with col_over:
+                                        st.metric(
+                                            f"Over {custom_line}",
+                                            f"{custom_result['over_percentage']}%",
+                                            f"{custom_result['over_count']} matches"
+                                        )
+                                    with col_under:
+                                        st.metric(
+                                            f"Under {custom_line}",
+                                            f"{custom_result['under_percentage']}%",
+                                            f"{custom_result['under_count']} matches"
+                                        )
+                                
+                                # Show predefined lines as well
+                                if 'Over/Under Lines' in market_data and market_data['Over/Under Lines']:
+                                    with st.expander("View Predefined Lines"):
+                                        over_under_data = []
+                                        for line_key, line_data in market_data['Over/Under Lines'].items():
+                                            line_value = line_key.replace('line_', '')
+                                            over_under_data.append({
+                                                'Line': line_value,
+                                                'Over %': f"{line_data['over_percentage']:.1f}%",
+                                                'Under %': f"{line_data['under_percentage']:.1f}%",
+                                                'Over Count': line_data['over_count'],
+                                                'Under Count': line_data['under_count']
+                                            })
+                                        
+                                        if over_under_data:
+                                            st.dataframe(pd.DataFrame(over_under_data), use_container_width=True)
                             
                             st.markdown("---")
                 
@@ -1030,6 +1074,7 @@ if page == "JSON Data Analyzer":
                 
                 with market_tabs[4]:  # Phase Markets
                     st.subheader("Phase-wise Runs Markets")
+                    st.info("📊 Phase markets analyze runs scored in first 6, 10, and 15 overs of the 1st innings only")
                     
                     phase_markets = formatted_betting_markets['Phase Markets']
                     
@@ -1047,25 +1092,66 @@ if page == "JSON Data Analyzer":
                             with col4:
                                 st.metric("Max", market_data['Max'])
                             
-                            # Over/Under analysis for phase markets
-                            if 'Over/Under Lines' in market_data and market_data['Over/Under Lines']:
-                                st.write("Over/Under Analysis:")
-                                over_under_data = []
-                                for line_key, line_data in market_data['Over/Under Lines'].items():
-                                    line_value = line_key.replace('line_', '')
-                                    over_under_data.append({
-                                        'Line': line_value,
-                                        'Over %': f"{line_data['over_percentage']:.1f}%",
-                                        'Under %': f"{line_data['under_percentage']:.1f}%"
-                                    })
+                            # Interactive Over/Under analysis for phase markets
+                            st.write("**Custom Over/Under Analysis:**")
+                            
+                            # Get the raw data for custom analysis
+                            raw_market_key = market_name.lower().replace(' ', '_').replace('(1st_innings_only)', '').replace('runs_', '').strip()
+                            raw_market_data = betting_markets.get(f'runs_{raw_market_key}', {})
+                            
+                            if 'runs' in raw_market_data and isinstance(raw_market_data['runs'], list):
+                                data_list = raw_market_data['runs']
                                 
-                                if over_under_data:
-                                    st.dataframe(pd.DataFrame(over_under_data), use_container_width=True)
+                                # User input for custom line
+                                default_line = int(market_data['Average'])
+                                custom_line = st.number_input(
+                                    f"Enter your over/under line for {market_name}:",
+                                    min_value=0,
+                                    max_value=int(market_data['Max']) + 20,
+                                    value=default_line,
+                                    step=1,
+                                    key=f"phase_line_{market_name.replace(' ', '_')}"
+                                )
+                                
+                                # Calculate custom over/under
+                                from betting_markets import calculate_custom_over_under
+                                custom_result = calculate_custom_over_under(data_list, custom_line)
+                                
+                                if 'error' not in custom_result:
+                                    col_over, col_under = st.columns(2)
+                                    with col_over:
+                                        st.metric(
+                                            f"Over {custom_line}",
+                                            f"{custom_result['over_percentage']}%",
+                                            f"{custom_result['over_count']} matches"
+                                        )
+                                    with col_under:
+                                        st.metric(
+                                            f"Under {custom_line}",
+                                            f"{custom_result['under_percentage']}%",
+                                            f"{custom_result['under_count']} matches"
+                                        )
+                            
+                            # Show predefined lines as well
+                            if 'Over/Under Lines' in market_data and market_data['Over/Under Lines']:
+                                with st.expander("View Predefined Lines"):
+                                    over_under_data = []
+                                    for line_key, line_data in market_data['Over/Under Lines'].items():
+                                        line_value = line_key.replace('line_', '')
+                                        over_under_data.append({
+                                            'Line': line_value,
+                                            'Over %': f"{line_data['over_percentage']:.1f}%",
+                                            'Under %': f"{line_data['under_percentage']:.1f}%"
+                                        })
+                                    
+                                    if over_under_data:
+                                        st.dataframe(pd.DataFrame(over_under_data), use_container_width=True)
                             
                             st.markdown("---")
                 
                 with market_tabs[5]:  # Special Markets
                     st.subheader("Special Betting Markets")
+                    st.info("📊 All special markets now include percentages for better analysis")
                     
                     special_markets = formatted_betting_markets['Special Markets']
                     
@@ -1076,8 +1162,15 @@ if page == "JSON Data Analyzer":
                             if i % 2 == 0:
                                 st.write(f"**{market_name}**")
                                 if isinstance(market_data, dict):
-                                    for outcome, count in market_data.items():
-                                        st.metric(outcome.replace('_', ' ').title(), count)
+                                    for outcome, data in market_data.items():
+                                        if isinstance(data, dict) and 'count' in data and 'percentage' in data:
+                                            st.metric(
+                                                outcome.replace('_', ' ').title(),
+                                                f"{data['count']} ({data['percentage']}%)"
+                                            )
+                                        else:
+                                            # Fallback for non-percentage data
+                                            st.metric(outcome.replace('_', ' ').title(), data)
                                 st.markdown("---")
                     
                     with col2:
@@ -1085,8 +1178,15 @@ if page == "JSON Data Analyzer":
                             if i % 2 == 1:
                                 st.write(f"**{market_name}**")
                                 if isinstance(market_data, dict):
-                                    for outcome, count in market_data.items():
-                                        st.metric(outcome.replace('_', ' ').title(), count)
+                                    for outcome, data in market_data.items():
+                                        if isinstance(data, dict) and 'count' in data and 'percentage' in data:
+                                            st.metric(
+                                                outcome.replace('_', ' ').title(),
+                                                f"{data['count']} ({data['percentage']}%)"
+                                            )
+                                        else:
+                                            # Fallback for non-percentage data
+                                            st.metric(outcome.replace('_', ' ').title(), data)
                                 st.markdown("---")
                 
                 with market_tabs[6]:  # Wicket Markets
@@ -1129,20 +1229,101 @@ if page == "JSON Data Analyzer":
                             with col4:
                                 st.metric("Max", market_data['Max'])
                             
-                            # Over/Under analysis for partnership markets
-                            if 'Over/Under Lines' in market_data and market_data['Over/Under Lines']:
-                                st.write("Over/Under Analysis:")
-                                over_under_data = []
-                                for line_key, line_data in market_data['Over/Under Lines'].items():
-                                    line_value = line_key.replace('line_', '')
-                                    over_under_data.append({
-                                        'Line': line_value,
-                                        'Over %': f"{line_data['over_percentage']:.1f}%",
-                                        'Under %': f"{line_data['under_percentage']:.1f}%"
-                                    })
+                            # Show match outcome analysis for opening partnership
+                            if 'Match Outcomes' in market_data:
+                                st.write("**Match Outcome Analysis:**")
+                                outcome_col1, outcome_col2, outcome_col3 = st.columns(3)
                                 
-                                if over_under_data:
-                                    st.dataframe(pd.DataFrame(over_under_data), use_container_width=True)
+                                with outcome_col1:
+                                    st.metric(
+                                        "Home Team Wins",
+                                        market_data['Match Outcomes']['Home Team Wins']
+                                    )
+                                with outcome_col2:
+                                    st.metric(
+                                        "Away Team Wins", 
+                                        market_data['Match Outcomes']['Away Team Wins']
+                                    )
+                                with outcome_col3:
+                                    st.metric(
+                                        "Ties/No Results",
+                                        market_data['Match Outcomes']['Ties/No Results']
+                                    )
+                                
+                                # Show percentages
+                                if 'Match Outcome Percentages' in market_data:
+                                    st.write("**Match Outcome Percentages:**")
+                                    perc_col1, perc_col2, perc_col3 = st.columns(3)
+                                    
+                                    with perc_col1:
+                                        st.metric(
+                                            "Home Win %",
+                                            f"{market_data['Match Outcome Percentages']['Home Team Win %']}%"
+                                        )
+                                    with perc_col2:
+                                        st.metric(
+                                            "Away Win %",
+                                            f"{market_data['Match Outcome Percentages']['Away Team Win %']}%"
+                                        )
+                                    with perc_col3:
+                                        st.metric(
+                                            "Tie/No Result %",
+                                            f"{market_data['Match Outcome Percentages']['Tie/No Result %']}%"
+                                        )
+                            
+                            # Interactive Over/Under analysis for partnership markets
+                            st.write("**Custom Over/Under Analysis:**")
+                            
+                            # Get the raw data for custom analysis
+                            raw_market_data = betting_markets.get('highest_opening_partnership', {})
+                            
+                            if 'partnerships' in raw_market_data and isinstance(raw_market_data['partnerships'], list):
+                                data_list = raw_market_data['partnerships']
+                                
+                                # User input for custom line
+                                default_line = int(market_data['Average'])
+                                custom_line = st.number_input(
+                                    f"Enter your over/under line for {market_name}:",
+                                    min_value=0,
+                                    max_value=int(market_data['Max']) + 20,
+                                    value=default_line,
+                                    step=1,
+                                    key=f"partnership_line_{market_name.replace(' ', '_')}"
+                                )
+                                
+                                # Calculate custom over/under
+                                from betting_markets import calculate_custom_over_under
+                                custom_result = calculate_custom_over_under(data_list, custom_line)
+                                
+                                if 'error' not in custom_result:
+                                    col_over, col_under = st.columns(2)
+                                    with col_over:
+                                        st.metric(
+                                            f"Over {custom_line}",
+                                            f"{custom_result['over_percentage']}%",
+                                            f"{custom_result['over_count']} matches"
+                                        )
+                                    with col_under:
+                                        st.metric(
+                                            f"Under {custom_line}",
+                                            f"{custom_result['under_percentage']}%",
+                                            f"{custom_result['under_count']} matches"
+                                        )
+                            
+                            # Show predefined lines as well
+                            if 'Over/Under Lines' in market_data and market_data['Over/Under Lines']:
+                                with st.expander("View Predefined Lines"):
+                                    over_under_data = []
+                                    for line_key, line_data in market_data['Over/Under Lines'].items():
+                                        line_value = line_key.replace('line_', '')
+                                        over_under_data.append({
+                                            'Line': line_value,
+                                            'Over %': f"{line_data['over_percentage']:.1f}%",
+                                            'Under %': f"{line_data['under_percentage']:.1f}%"
+                                        })
+                                    
+                                    if over_under_data:
+                                        st.dataframe(pd.DataFrame(over_under_data), use_container_width=True)
                             
                             st.markdown("---")
                 

@@ -82,7 +82,7 @@ def calculate_betting_markets(data_list: List[Dict]) -> Dict[str, Any]:
         'total_runs_out': {'runs': [], 'over': 0, 'under': 0},
         'most_sixes': {'team_1': 0, 'team_2': 0, 'tie': 0},
         'most_fours': {'team_1': 0, 'team_2': 0, 'tie': 0},
-        'highest_opening_partnership': {'partnerships': [], 'over': 0, 'under': 0},
+        'highest_opening_partnership': {'partnerships': [], 'over': 0, 'under': 0, 'home_wins': 0, 'away_wins': 0, 'ties': 0},
         'most_runs_out': {'team_1': 0, 'team_2': 0, 'tie': 0}
     }
     
@@ -126,7 +126,7 @@ def _process_match_for_betting_markets(match_data: Dict, markets: Dict) -> None:
     match_stats = _calculate_match_stats(match_data)
     
     # Update markets with match stats
-    _update_markets_with_match_stats(markets, match_stats, teams)
+    _update_markets_with_match_stats(markets, match_stats, teams, match_data)
 
 def _calculate_match_stats(match_data: Dict) -> Dict:
     """Calculate comprehensive statistics for a single match."""
@@ -239,13 +239,14 @@ def _calculate_match_stats(match_data: Dict) -> Dict:
                         if 'caught' in kind:
                             team_stats['wickets_caught'] += 1
                 
-                # Phase-wise runs (first 6, 10, 15 overs)
-                if over_idx < 6:
-                    stats['runs_first_6'] += total_runs
-                if over_idx < 10:
-                    stats['runs_first_10'] += total_runs
-                if over_idx < 15:
-                    stats['runs_first_15'] += total_runs
+                # Phase-wise runs (first 6, 10, 15 overs) - Only for 1st innings
+                if inning_idx == 0:  # Only first innings
+                    if over_idx < 6:
+                        stats['runs_first_6'] += total_runs
+                    if over_idx < 10:
+                        stats['runs_first_10'] += total_runs
+                    if over_idx < 15:
+                        stats['runs_first_15'] += total_runs
             
             # Check for six boundaries in over
             if over_boundaries >= 6:
@@ -287,7 +288,7 @@ def _calculate_match_stats(match_data: Dict) -> Dict:
     
     return stats
 
-def _update_markets_with_match_stats(markets: Dict, match_stats: Dict, teams: List[str]) -> None:
+def _update_markets_with_match_stats(markets: Dict, match_stats: Dict, teams: List[str], match_data: Dict = None) -> None:
     """Update betting markets with calculated match statistics."""
     
     # Total runs
@@ -316,9 +317,34 @@ def _update_markets_with_match_stats(markets: Dict, match_stats: Dict, teams: Li
     # Total runs out
     markets['total_runs_out']['runs'].append(match_stats['total_runs_out'])
     
-    # Opening partnerships
+    # Opening partnerships with match outcome tracking
     if match_stats['opening_partnerships']:
         markets['highest_opening_partnership']['partnerships'].extend(match_stats['opening_partnerships'])
+        
+        # Track which team won based on opening partnership performance
+        if len(teams) >= 2 and match_data:
+            team_1, team_2 = teams[0], teams[1]
+            info = match_data.get('info', {})
+            winner = info.get('outcome', {}).get('winner')
+            
+            # Get the opening partnership for the first innings (team that batted first)
+            first_innings_team = None
+            if match_data.get('innings') and len(match_data['innings']) > 0:
+                first_innings_team = match_data['innings'][0].get('team')
+            
+            if first_innings_team and match_stats['opening_partnerships']:
+                if winner == first_innings_team:
+                    if first_innings_team == team_1:
+                        markets['highest_opening_partnership']['home_wins'] += 1
+                    else:
+                        markets['highest_opening_partnership']['away_wins'] += 1
+                elif winner and winner != 'No Result':
+                    if first_innings_team == team_1:
+                        markets['highest_opening_partnership']['away_wins'] += 1
+                    else:
+                        markets['highest_opening_partnership']['home_wins'] += 1
+                else:
+                    markets['highest_opening_partnership']['ties'] += 1
     
     # First wicket method
     if match_stats['first_wicket_method']:
@@ -501,10 +527,10 @@ def format_betting_markets_for_display(markets: Dict) -> Dict[str, Any]:
     
     formatted = {
         'Match Outcome Markets': {
-            'Match Winner': markets['match_winner'],
-            'Toss Winner': markets['toss_winner'],
-            'Most Sixes': markets['most_sixes'],
-            'Most Fours': markets['most_fours']
+            'Match Winner': _add_percentages_to_categorical(markets['match_winner']),
+            'Toss Winner': _add_percentages_to_categorical(markets['toss_winner']),
+            'Most Sixes': _add_percentages_to_categorical(markets['most_sixes']),
+            'Most Fours': _add_percentages_to_categorical(markets['most_fours'])
         },
         
         'Runs Markets': {
@@ -530,18 +556,22 @@ def format_betting_markets_for_display(markets: Dict) -> Dict[str, Any]:
         },
         
         'Phase Markets': {
-            'Runs First 6 Overs': _format_numeric_market(markets['runs_first_6_overs']),
-            'Runs First 10 Overs': _format_numeric_market(markets['runs_first_10_overs']),
-            'Runs First 15 Overs': _format_numeric_market(markets['runs_first_15_overs'])
+            'Runs First 6 Overs (1st Innings Only)': _format_numeric_market(markets['runs_first_6_overs']),
+            'Runs First 10 Overs (1st Innings Only)': _format_numeric_market(markets['runs_first_10_overs']),
+            'Runs First 15 Overs (1st Innings Only)': _format_numeric_market(markets['runs_first_15_overs'])
         },
         
         'Special Markets': {
-            'First Wicket Method': markets['first_wicket_method'],
-            'Fifty Scored': markets['fifty_scored'],
-            'Hundred Scored': markets['hundred_scored'],
-            'First Ball Dot': markets['first_ball_dot'],
-            'Six Boundaries in Over': markets['six_boundaries_in_over'],
-            'First Scoring Shot': markets['first_scoring_shot']
+            'First Wicket Method': _add_percentages_to_categorical(markets['first_wicket_method']),
+            'Fifty Scored': _add_percentages_to_categorical(markets['fifty_scored']),
+            'Hundred Scored': _add_percentages_to_categorical(markets['hundred_scored']),
+            'Home Fifty Scored': _add_percentages_to_categorical(markets['home_fifty_scored']),
+            'Away Fifty Scored': _add_percentages_to_categorical(markets['away_fifty_scored']),
+            'Home Hundred Scored': _add_percentages_to_categorical(markets['home_hundred_scored']),
+            'Away Hundred Scored': _add_percentages_to_categorical(markets['away_hundred_scored']),
+            'First Ball Dot': _add_percentages_to_categorical(markets['first_ball_dot']),
+            'Six Boundaries in Over': _add_percentages_to_categorical(markets['six_boundaries_in_over']),
+            'First Scoring Shot': _add_percentages_to_categorical(markets['first_scoring_shot'])
         },
         
         'Wicket Markets': {
@@ -551,11 +581,77 @@ def format_betting_markets_for_display(markets: Dict) -> Dict[str, Any]:
         
         'Partnership Markets': {
             'Runs at Fall 1st Wicket': _format_numeric_market(markets['runs_at_fall_first_wicket']),
-            'Highest Opening Partnership': _format_numeric_market(markets['highest_opening_partnership'])
+            'Highest Opening Partnership': _format_opening_partnership_market(markets['highest_opening_partnership'])
         }
     }
     
     return formatted
+
+def _add_percentages_to_categorical(market_data: Dict) -> Dict:
+    """Add percentages to categorical market data."""
+    if not isinstance(market_data, dict):
+        return market_data
+    
+    total = sum(market_data.values())
+    if total == 0:
+        return market_data
+    
+    result = {}
+    for outcome, count in market_data.items():
+        percentage = (count / total) * 100
+        result[outcome] = {
+            'count': count,
+            'percentage': round(percentage, 1)
+        }
+    
+    return result
+
+def _format_opening_partnership_market(market_data: Dict) -> Dict:
+    """Format opening partnership market with match outcome analysis."""
+    if not market_data or 'average' not in market_data:
+        return market_data
+    
+    result = {
+        'Average': round(market_data['average'], 2),
+        'Median': market_data['median'],
+        'Min': market_data['min'],
+        'Max': market_data['max'],
+        'Sample Size': market_data['count'],
+        'Over/Under Lines': market_data.get('over_under_analysis', {}),
+        'Match Outcomes': {
+            'Home Team Wins': market_data.get('home_wins', 0),
+            'Away Team Wins': market_data.get('away_wins', 0),
+            'Ties/No Results': market_data.get('ties', 0)
+        }
+    }
+    
+    # Add percentages for match outcomes
+    total_matches = result['Match Outcomes']['Home Team Wins'] + result['Match Outcomes']['Away Team Wins'] + result['Match Outcomes']['Ties/No Results']
+    if total_matches > 0:
+        result['Match Outcome Percentages'] = {
+            'Home Team Win %': round((result['Match Outcomes']['Home Team Wins'] / total_matches) * 100, 1),
+            'Away Team Win %': round((result['Match Outcomes']['Away Team Wins'] / total_matches) * 100, 1),
+            'Tie/No Result %': round((result['Match Outcomes']['Ties/No Results'] / total_matches) * 100, 1)
+        }
+    
+    return result
+
+def calculate_custom_over_under(data_list: List[float], custom_line: float) -> Dict:
+    """Calculate over/under percentages for a custom line."""
+    if not data_list:
+        return {'error': 'No data available'}
+    
+    over_count = sum(1 for value in data_list if value > custom_line)
+    under_count = len(data_list) - over_count
+    
+    return {
+        'line': custom_line,
+        'over_count': over_count,
+        'under_count': under_count,
+        'over_percentage': round((over_count / len(data_list)) * 100, 1),
+        'under_percentage': round((under_count / len(data_list)) * 100, 1),
+        'total_matches': len(data_list)
+    }
 
 def _format_numeric_market(market_data: Dict) -> Dict:
     """Format numeric market data for display."""
