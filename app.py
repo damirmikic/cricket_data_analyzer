@@ -1748,7 +1748,7 @@ if page == "JSON Data Analyzer":
                         title='Average Run Rate by Venue',
                         hover_data=['Matches']
                     )
-                    fig_run_rate.update_xaxis(tickangle=45)
+                    fig_run_rate.update_xaxes(tickangle=45)
                     st.plotly_chart(fig_run_rate, use_container_width=True)
                     
                     # Boundary percentage comparison
@@ -1769,7 +1769,7 @@ if page == "JSON Data Analyzer":
                         title='Boundary Percentage by Venue',
                         hover_data=['Four %', 'Six %']
                     )
-                    fig_boundary.update_xaxis(tickangle=45)
+                    fig_boundary.update_xaxes(tickangle=45)
                     st.plotly_chart(fig_boundary, use_container_width=True)
                     
                     # First vs Second innings comparison
@@ -1790,7 +1790,7 @@ if page == "JSON Data Analyzer":
                         title='First vs Second Innings Average Scores by Venue',
                         barmode='group'
                     )
-                    fig_innings.update_xaxis(tickangle=45)
+                    fig_innings.update_xaxes(tickangle=45)
                     st.plotly_chart(fig_innings, use_container_width=True)
                 
                 # Export detailed venue statistics
@@ -2084,7 +2084,7 @@ if page == "JSON Data Analyzer":
                         title='Phase-wise Runs Scored by Team',
                         barmode='group'
                     )
-                    fig_phase_scored.update_xaxis(tickangle=45)
+                    fig_phase_scored.update_xaxes(tickangle=45)
                     st.plotly_chart(fig_phase_scored, use_container_width=True)
                     
                     # Runs conceded comparison
@@ -2096,7 +2096,7 @@ if page == "JSON Data Analyzer":
                         title='Phase-wise Runs Conceded by Team',
                         barmode='group'
                     )
-                    fig_phase_conceded.update_xaxis(tickangle=45)
+                    fig_phase_conceded.update_xaxes(tickangle=45)
                     st.plotly_chart(fig_phase_conceded, use_container_width=True)
                 
                 # Export detailed team statistics
