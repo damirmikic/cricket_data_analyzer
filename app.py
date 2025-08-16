@@ -950,24 +950,36 @@ if page == "JSON Data Analyzer":
                     with col1:
                         st.write("**Match Winner**")
                         match_winner = formatted_betting_markets['Match Outcome Markets']['Match Winner']
-                        for outcome, count in match_winner.items():
-                            st.metric(outcome.replace('_', ' ').title(), count)
+                        for outcome, data in match_winner.items():
+                            if isinstance(data, dict) and 'count' in data and 'percentage' in data:
+                                st.metric(outcome.replace('_', ' ').title(), f"{data['count']} ({data['percentage']}%)")
+                            else:
+                                st.metric(outcome.replace('_', ' ').title(), data)
                         
                         st.write("**Most Sixes**")
                         most_sixes = formatted_betting_markets['Match Outcome Markets']['Most Sixes']
-                        for outcome, count in most_sixes.items():
-                            st.metric(outcome.replace('_', ' ').title(), count)
+                        for outcome, data in most_sixes.items():
+                            if isinstance(data, dict) and 'count' in data and 'percentage' in data:
+                                st.metric(outcome.replace('_', ' ').title(), f"{data['count']} ({data['percentage']}%)")
+                            else:
+                                st.metric(outcome.replace('_', ' ').title(), data)
                     
                     with col2:
                         st.write("**Toss Winner**")
                         toss_winner = formatted_betting_markets['Match Outcome Markets']['Toss Winner']
-                        for outcome, count in toss_winner.items():
-                            st.metric(outcome.replace('_', ' ').title(), count)
+                        for outcome, data in toss_winner.items():
+                            if isinstance(data, dict) and 'count' in data and 'percentage' in data:
+                                st.metric(outcome.replace('_', ' ').title(), f"{data['count']} ({data['percentage']}%)")
+                            else:
+                                st.metric(outcome.replace('_', ' ').title(), data)
                         
                         st.write("**Most Fours**")
                         most_fours = formatted_betting_markets['Match Outcome Markets']['Most Fours']
-                        for outcome, count in most_fours.items():
-                            st.metric(outcome.replace('_', ' ').title(), count)
+                        for outcome, data in most_fours.items():
+                            if isinstance(data, dict) and 'count' in data and 'percentage' in data:
+                                st.metric(outcome.replace('_', ' ').title(), f"{data['count']} ({data['percentage']}%)")
+                            else:
+                                st.metric(outcome.replace('_', ' ').title(), data)
                 
                 with market_tabs[1]:  # Runs Markets
                     st.subheader("Runs Markets - Interactive Over/Under Analysis")
