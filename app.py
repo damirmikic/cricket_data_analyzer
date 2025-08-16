@@ -2,9 +2,29 @@ import streamlit as st
 import pandas as pd
 import json
 import plotly.express as px
-from betting_markets import calculate_betting_markets, format_betting_markets_for_display, calculate_custom_over_under
 
 st.set_page_config(layout="wide")
+
+# Import betting markets functions with comprehensive error handling
+BETTING_MARKETS_AVAILABLE = False
+betting_markets_error = None
+
+try:
+    from betting_markets import calculate_betting_markets, format_betting_markets_for_display, calculate_custom_over_under
+    BETTING_MARKETS_AVAILABLE = True
+except ImportError as e:
+    betting_markets_error = f"ImportError: {str(e)}"
+except Exception as e:
+    betting_markets_error = f"Error: {str(e)}"
+
+# Define fallback functions if betting markets module is not available
+if not BETTING_MARKETS_AVAILABLE:
+    def calculate_betting_markets(data):
+        return {}
+    def format_betting_markets_for_display(data):
+        return {}
+    def calculate_custom_over_under(data, line):
+        return {'error': 'Betting markets module not available'}
 
 # --- Helper Functions ---
 
@@ -873,8 +893,12 @@ if page == "JSON Data Analyzer":
         raw_data, match_summary, bbb, batting_summary, bowling_summary, market_summaries_df = process_all_files(json_files)
         
         # Calculate comprehensive betting markets
-        betting_markets = calculate_betting_markets(raw_data)
-        formatted_betting_markets = format_betting_markets_for_display(betting_markets)
+        if BETTING_MARKETS_AVAILABLE:
+            betting_markets = calculate_betting_markets(raw_data)
+            formatted_betting_markets = format_betting_markets_for_display(betting_markets)
+        else:
+            betting_markets = {}
+            formatted_betting_markets = {}
 
         st.sidebar.subheader("JSON Analyzer Views")
         json_page = st.sidebar.radio("Choose a data view", ["Match Summaries", "Aggregated Batting Stats", "Aggregated Bowling Stats", "Combined Ball-by-Ball", "Betting Market Summaries", "Markov Chain Statistics", "Venue-wise Statistics", "Team-wise Statistics"])
@@ -904,9 +928,14 @@ if page == "JSON Data Analyzer":
         
         elif json_page == "Betting Market Summaries":
             st.subheader("🎯 Comprehensive Betting Markets Analysis")
-            st.info("Complete analysis of all betting markets from your cricket matches. All markets you requested are calculated below.")
             
-            if formatted_betting_markets:
+            if not BETTING_MARKETS_AVAILABLE:
+                st.error("❌ Betting Markets module is not available.")
+                if betting_markets_error:
+                    st.error(f"Error details: {betting_markets_error}")
+                st.info("📋 The betting markets functionality requires the betting_markets.py module to be properly imported. Please check the file and dependencies.")
+                st.info("💡 You can still use all other features of the cricket analyzer (Match Summaries, Player Stats, Ball-by-Ball Data, Markov Chain Statistics, etc.)")
+            elif formatted_betting_markets:
                 # Create tabs for different market categories
                 market_tabs = st.tabs([
                     "Match Outcomes", "Runs Markets", "Team Markets", 
