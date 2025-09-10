@@ -496,10 +496,10 @@ def calculate_markov_chain_stats(data_list, team_wise=False):
     """
     all_deliveries = []
     
-    # New counters for over-level boundary stats
-    overs_with_fours = 0
-    overs_with_sixes = 0
-    overs_with_both_fours_and_sixes = 0
+    # New counters for detailed over-level boundary stats
+    fours_in_over_counts = {0: 0, 1: 0, 2: 0, '3+': 0}
+    sixes_in_over_counts = {0: 0, 1: 0, 2: 0, '3+': 0}
+    both_in_over_counts = {0: 0, 1: 0, 2: 0, '3+': 0} # Combined fours and sixes
     total_overs = 0
 
     # Extract all deliveries from all matches
@@ -509,17 +509,18 @@ def calculate_markov_chain_stats(data_list, team_wise=False):
             for over in inning.get('overs', []):
                 total_overs += 1
                 over_num = over.get('over', 0)
-                has_four_in_over = False
-                has_six_in_over = False
+                fours_this_over = 0
+                sixes_this_over = 0
+                
                 for ball_num, delivery in enumerate(over.get('deliveries', [])):
                     # Skip extras (wides, no-balls) for ball-by-ball analysis
                     if 'extras' not in delivery or not any(k in delivery['extras'] for k in ['wides', 'noballs']):
                         is_four = delivery['runs']['batter'] == 4
                         is_six = delivery['runs']['batter'] == 6
                         if is_four:
-                            has_four_in_over = True
+                            fours_this_over += 1
                         if is_six:
-                            has_six_in_over = True
+                            sixes_this_over += 1
 
                         delivery_info = {
                             'team': inning_team,
@@ -537,13 +538,25 @@ def calculate_markov_chain_stats(data_list, team_wise=False):
                         }
                         all_deliveries.append(delivery_info)
                 
-                if has_four_in_over:
-                    overs_with_fours += 1
-                if has_six_in_over:
-                    overs_with_sixes += 1
-                if has_four_in_over and has_six_in_over:
-                    overs_with_both_fours_and_sixes += 1
-    
+                # Categorize and count for fours
+                if fours_this_over == 0: fours_in_over_counts[0] += 1
+                elif fours_this_over == 1: fours_in_over_counts[1] += 1
+                elif fours_this_over == 2: fours_in_over_counts[2] += 1
+                else: fours_in_over_counts['3+'] += 1
+
+                # Categorize and count for sixes
+                if sixes_this_over == 0: sixes_in_over_counts[0] += 1
+                elif sixes_this_over == 1: sixes_in_over_counts[1] += 1
+                elif sixes_this_over == 2: sixes_in_over_counts[2] += 1
+                else: sixes_in_over_counts['3+'] += 1
+                
+                # Categorize and count for combined boundaries
+                both_this_over = fours_this_over + sixes_this_over
+                if both_this_over == 0: both_in_over_counts[0] += 1
+                elif both_this_over == 1: both_in_over_counts[1] += 1
+                elif both_this_over == 2: both_in_over_counts[2] += 1
+                else: both_in_over_counts['3+'] += 1
+
     if not all_deliveries:
         return {"error": "No valid deliveries found in the data"}
     
@@ -574,14 +587,11 @@ def calculate_markov_chain_stats(data_list, team_wise=False):
         'middle_overs_stats': {},
         'death_overs_stats': {},
         
-        # Over-level boundary stats
+        # Over-level boundary stats (percentages)
         'total_overs': total_overs,
-        'overs_with_fours': overs_with_fours,
-        'overs_with_sixes': overs_with_sixes,
-        'overs_with_both_fours_and_sixes': overs_with_both_fours_and_sixes,
-        'percentage_overs_with_fours': (overs_with_fours / total_overs) * 100 if total_overs > 0 else 0,
-        'percentage_overs_with_sixes': (overs_with_sixes / total_overs) * 100 if total_overs > 0 else 0,
-        'percentage_overs_with_both_fours_and_sixes': (overs_with_both_fours_and_sixes / total_overs) * 100 if total_overs > 0 else 0,
+        'fours_in_over_percentages': {k: (v / total_overs) * 100 if total_overs > 0 else 0 for k, v in fours_in_over_counts.items()},
+        'sixes_in_over_percentages': {k: (v / total_overs) * 100 if total_overs > 0 else 0 for k, v in sixes_in_over_counts.items()},
+        'both_in_over_percentages': {k: (v / total_overs) * 100 if total_overs > 0 else 0 for k, v in both_in_over_counts.items()},
     }
     
     # Calculate phase-wise statistics
@@ -1485,18 +1495,23 @@ if page == "JSON Data Analyzer":
                     st.metric("Dot Ball %", f"{markov_stats['dot_ball_percentage']:.1f}%")
                     st.metric("Boundary %", f"{markov_stats.get('boundary_percentage', 0):.1f}%")
 
-                # Over-level boundary stats
+                # Over-level boundary distribution
                 st.markdown("---")
-                st.subheader("Over-level Boundary Analysis")
-                col1, col2, col3, col4 = st.columns(4)
+                st.subheader("Over-level Boundary Distribution")
+                
+                col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.metric("Total Overs", f"{markov_stats['total_overs']:,}")
+                    st.write("**Fours per Over**")
+                    for count, perc in markov_stats['fours_in_over_percentages'].items():
+                        st.metric(f"{count} Fours", f"{perc:.1f}%")
                 with col2:
-                    st.metric("Overs with 4s", f"{markov_stats['overs_with_fours']} ({markov_stats['percentage_overs_with_fours']:.1f}%)")
+                    st.write("**Sixes per Over**")
+                    for count, perc in markov_stats['sixes_in_over_percentages'].items():
+                        st.metric(f"{count} Sixes", f"{perc:.1f}%")
                 with col3:
-                    st.metric("Overs with 6s", f"{markov_stats['overs_with_sixes']} ({markov_stats['percentage_overs_with_sixes']:.1f}%)")
-                with col4:
-                    st.metric("Overs with 4s & 6s", f"{markov_stats['overs_with_both_fours_and_sixes']} ({markov_stats['percentage_overs_with_both_fours_and_sixes']:.1f}%)")
+                    st.write("**Boundaries per Over**")
+                    for count, perc in markov_stats['both_in_over_percentages'].items():
+                        st.metric(f"{count} Boundaries", f"{perc:.1f}%")
 
                 # First over and first 6 overs statistics
                 st.markdown("---")
