@@ -919,20 +919,28 @@ def display_frequency_analysis(df):
 # --- Main App UI ---
 st.title("🏏 Multi-Match Cricket Data Analyzer")
 
+# Initialize session state
+if 'json_files' not in st.session_state:
+    st.session_state.json_files = None
+
 st.sidebar.header("Upload Data")
-json_files = st.sidebar.file_uploader("Upload JSON match files", type=["json"], accept_multiple_files=True)
+st.session_state.json_files = st.sidebar.file_uploader("Upload JSON match files", type=["json"], accept_multiple_files=True)
+
+if st.sidebar.button("Clear Uploaded Files"):
+    st.session_state.json_files = None
+    st.experimental_rerun()
 
 st.sidebar.header("Navigation")
 # Always show JSON analyzer. Show CSV analyzer only if JSONs are uploaded.
 nav_options = ["JSON Data Analyzer"]
-if json_files:
+if st.session_state.json_files:
     nav_options.append("CSV Market Analyzer")
 page = st.sidebar.radio("Choose an analyzer", nav_options)
 
 
 if page == "JSON Data Analyzer":
-    if json_files:
-        raw_data, match_summary, bbb, batting_summary, bowling_summary, market_summaries_df = process_all_files(json_files)
+    if st.session_state.json_files:
+        raw_data, match_summary, bbb, batting_summary, bowling_summary, market_summaries_df = process_all_files(st.session_state.json_files)
         
         # Calculate comprehensive betting markets
         if BETTING_MARKETS_AVAILABLE:
@@ -945,27 +953,35 @@ if page == "JSON Data Analyzer":
         st.sidebar.subheader("JSON Analyzer Views")
         json_page = st.sidebar.radio("Choose a data view", ["Match Summaries", "Aggregated Batting Stats", "Aggregated Bowling Stats", "Combined Ball-by-Ball", "Betting Market Summaries", "Markov Chain Statistics", "Venue-wise Statistics", "Team-wise Statistics"])
         
-        st.header(f"Analysis of {len(json_files)} Match(es)")
+        st.header(f"Analysis of {len(st.session_state.json_files)} Match(es)")
         st.markdown("---")
 
         if json_page == "Match Summaries":
             st.subheader("Match Summaries (Standardized)")
             st.dataframe(match_summary)
+            if st.button("Copy Summaries to Clipboard"):
+                st.text_area("Copy this text", match_summary.to_csv(index=False), height=200)
             st.download_button("Download Summaries CSV", to_csv(match_summary), "match_summaries.csv", "text/csv")
         
         elif json_page == "Aggregated Batting Stats":
             st.subheader("Aggregated Player Batting Stats")
             st.dataframe(batting_summary)
+            if st.button("Copy Batting Stats to Clipboard"):
+                st.text_area("Copy this text", batting_summary.to_csv(index=False), height=200)
             st.download_button("Download Batting CSV", to_csv(batting_summary), "aggregated_batting_summary.csv", "text/csv")
         
         elif json_page == "Aggregated Bowling Stats":
             st.subheader("Aggregated Player Bowling Stats")
             st.dataframe(bowling_summary)
+            if st.button("Copy Bowling Stats to Clipboard"):
+                st.text_area("Copy this text", bowling_summary.to_csv(index=False), height=200)
             st.download_button("Download Bowling CSV", to_csv(bowling_summary), "aggregated_bowling_summary.csv", "text/csv")
         
         elif json_page == "Combined Ball-by-Ball":
             st.subheader("Combined Ball-by-Ball Data")
             st.dataframe(bbb)
+            if st.button("Copy Ball-by-Ball Data to Clipboard"):
+                st.text_area("Copy this text", bbb.to_csv(index=False), height=200)
             st.download_button("Download Ball-by-Ball CSV", to_csv(bbb), "combined_ball_by_ball.csv", "text/csv")
         
         elif json_page == "Betting Market Summaries":
