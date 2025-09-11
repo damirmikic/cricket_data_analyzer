@@ -28,6 +28,23 @@ if not BETTING_MARKETS_AVAILABLE:
 
 # --- Helper Functions ---
 
+def categorize_pitch(venue_stats):
+    """Categorize the pitch profile based on venue statistics."""
+    run_rate = venue_stats.get('avg_run_rate', 0)
+    boundary_percentage = venue_stats.get('boundary_percentage', 0)
+    dot_ball_percentage = venue_stats.get('dot_ball_percentage', 0)
+
+    if run_rate > 8.5 and boundary_percentage > 15:
+        return "Batting Paradise"
+    elif run_rate < 7.5 and dot_ball_percentage > 40:
+        return "Slow & Low"
+    elif run_rate > 8.0 and boundary_percentage < 14:
+        return "Green Seamer"
+    elif run_rate < 8.0 and dot_ball_percentage > 35:
+        return "Dry Turner"
+    else:
+        return "Balanced"
+
 def calculate_team_stats(all_deliveries, team_name):
     """
     Calculate statistics for a specific team.
@@ -198,7 +215,7 @@ def calculate_venue_wise_stats(data_list):
     venue_summary = {}
     for venue, stats in venue_stats.items():
         if stats['matches'] > 0:
-            venue_summary[venue] = {
+            summary = {
                 'matches': stats['matches'],
                 'avg_total_runs_per_match': sum(stats['team_totals']) / len(stats['team_totals']) if stats['team_totals'] else 0,
                 'avg_runs_per_ball': stats['total_runs'] / stats['total_balls'] if stats['total_balls'] > 0 else 0,
@@ -218,6 +235,8 @@ def calculate_venue_wise_stats(data_list):
                 'bat_first_win_rate': 0,
                 'bowl_first_win_rate': 0
             }
+            summary['pitch_profile'] = categorize_pitch(summary)
+            venue_summary[venue] = summary
             
             # Calculate toss and decision impact
             toss_win_match_win = sum(1 for i, winner in enumerate(stats['match_winners']) 
@@ -464,7 +483,8 @@ def calculate_team_wise_stats(data_list):
                 'bowling_strike_rate': stats['total_balls_bowled'] / stats['total_wickets_taken'] if stats['total_wickets_taken'] > 0 else 0,
                 'bowling_economy': stats['total_runs_conceded'] / (stats['total_balls_bowled'] / 6) if stats['total_balls_bowled'] > 0 else 0,
                 'avg_powerplay_runs_conceded': sum(stats['powerplay_runs_conceded']) / len(stats['powerplay_runs_conceded']) if stats['powerplay_runs_conceded'] else 0,
-                'avg_death_over_runs_conceded': sum(stats['death_over_runs_conceded']) / len(stats['death_over_runs_conceded']) if stats['death_over_runs_conceded'] else 0
+                'avg_death_over_runs_conceded': sum(stats['death_over_runs_conceded']) / len(stats['death_over_runs_conceded']) if stats['death_over_runs_conceded'] else 0,
+                'wicket_percentage_per_ball': (stats['total_wickets_lost'] / stats['total_balls_faced'] * 100) if stats['total_balls_faced'] > 0 else 0,
             }
             
             # Add ball outcome probabilities for Markov chain modeling
@@ -1691,6 +1711,7 @@ if page == "JSON Data Analyzer":
                     venue_comparison_data.append({
                         'Venue': venue,
                         'Matches': stats['matches'],
+                        'Pitch Profile': stats['pitch_profile'],
                         'Avg Run Rate': f"{stats['avg_run_rate']:.2f}",
                         'Avg 1st Innings': f"{stats['avg_first_innings']:.0f}",
                         'Avg 2nd Innings': f"{stats['avg_second_innings']:.0f}",
@@ -1732,7 +1753,7 @@ if page == "JSON Data Analyzer":
                     col1, col2, col3, col4 = st.columns(4)
                     with col1:
                         st.metric("Matches Played", venue_data['matches'])
-                        st.metric("Avg Run Rate", f"{venue_data['avg_run_rate']:.2f}")
+                        st.metric("Pitch Profile", venue_data['pitch_profile'])
                     with col2:
                         st.metric("Highest Total", f"{venue_data['highest_team_total']:.0f}")
                         st.metric("Lowest Total", f"{venue_data['lowest_team_total']:.0f}")
@@ -2058,7 +2079,20 @@ if page == "JSON Data Analyzer":
                         st.metric("Bat First Win Rate", f"{team_data['bat_first_win_rate']:.1f}%")
                     with toss_col4:
                         st.metric("Bowl First Win Rate", f"{team_data['bowl_first_win_rate']:.1f}%")
-                
+
+                    # Ball outcome probabilities
+                    st.markdown("---")
+                    st.write("**Ball Outcome Probabilities (per ball):**")
+                    prob_cols = st.columns(4)
+                    for i in range(7):
+                        col_idx = i % 4
+                        prob_key = f'runs_{i}_probability'
+                        if prob_key in team_data:
+                            prob_cols[col_idx].metric(f"{i} Runs", f"{team_data[prob_key]:.2f}%")
+                    
+                    if 'wicket_percentage_per_ball' in team_data:
+                        st.metric("Wicket", f"{team_data['wicket_percentage_per_ball']:.2f}%")
+
                 # Ball outcome probabilities for Markov chain modeling
                 st.markdown("---")
                 st.write("**Ball Outcome Probabilities (for Markov States):**")
